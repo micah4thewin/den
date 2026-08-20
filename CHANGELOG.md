@@ -79,6 +79,11 @@ the build plan's milestones, not semver.
 - The search list deduplicated with `Vec::dedup`, which only removes
   neighbours, so overlapping sources left repeats in it. Order is the priority
   here, so it is deduplicated without sorting.
+- A cores directory was taken on existence alone, so an empty
+  `~/.config/retroarch/cores` — which plenty of installs have — shadowed the
+  real one and wrote a `libretro_directory` pointing at nothing. A directory
+  now has to hold a core to count, and the binary's own directory is checked
+  last, for a bundle that flattened the staged tree.
 - **RetroArch was only ever looked for as `retroarch` on `PATH`,** resolved
   once at startup. That misses the macOS app bundle (never on `PATH`),
   `retroarch.exe` on Windows (so Den could not launch anything there at all),
@@ -161,7 +166,7 @@ the build plan's milestones, not semver.
   committed `__pycache__`.
 
 ### Verified
-- `cargo test --workspace` green: 72 tests across the seven crates.
+- `cargo test --workspace` green: 74 tests across the seven crates.
 - `cargo clippy --workspace --all-targets -- -D warnings` and
   `cargo fmt --all --check` clean.
 - `npm run build` (types and bundle) clean, with no unresolved assets.

@@ -341,7 +341,38 @@ fn core_dir(retroarch: &Path) -> Option<PathBuf> {
     candidates.push(PathBuf::from("/usr/local/lib/libretro"));
     candidates.push(PathBuf::from("/usr/lib/x86_64-linux-gnu/libretro"));
 
-    candidates.into_iter().find(|d| d.is_dir())
+    // Last: the binary's own directory. A bundler that flattens the staged
+    // tree leaves the cores beside RetroArch rather than under `cores/`, and
+    // this is checked last so it never shadows a real cores directory.
+    if let Some(parent) = retroarch.parent() {
+        candidates.push(parent.to_path_buf());
+    }
+
+    // A directory only counts if it actually holds a core; several of the
+    // paths above exist on a machine that has no cores in them at all, and
+    // naming an empty one in the config would point RetroArch at nothing.
+    candidates
+        .into_iter()
+        .find(|d| d.is_dir() && holds_a_core(d))
+}
+
+/// Whether a directory holds at least one libretro core for this platform.
+fn holds_a_core(dir: &Path) -> bool {
+    let ext = core_file_name("x");
+    let ext = ext.rsplit_once('.').map(|(_, e)| e.to_string());
+    let Some(ext) = ext else { return false };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|e| {
+        let path = e.path();
+        path.extension().and_then(|x| x.to_str()) == Some(ext.as_str())
+            && path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.contains("_libretro"))
+                .unwrap_or(false)
+    })
 }
 
 /// `RETROARCH`, if it is set to anything.
@@ -697,6 +728,37 @@ mod tests {
             fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
         }
         path
+    }
+
+    #[test]
+    fn the_cores_directory_must_actually_hold_cores() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin_dir = tmp.path().join("bin");
+        let retroarch = plant(&bin_dir, "retroarch");
+
+        // An empty `cores/` beside the binary is not the answer: naming it in
+        // the config would point RetroArch at nothing.
+        fs::create_dir_all(bin_dir.join("cores")).unwrap();
+        let runner = Runner::new(tmp.path(), &tmp.path().join("_config"));
+        assert_ne!(
+            runner.cores_for(&retroarch),
+            Some(bin_dir.join("cores")),
+            "an empty directory should not be taken for a cores directory"
+        );
+
+        // One with a core in it is.
+        fs::write(bin_dir.join("cores").join(core_file_name("mesen")), b"x").unwrap();
+        assert_eq!(runner.cores_for(&retroarch), Some(bin_dir.join("cores")));
+    }
+
+    #[test]
+    fn cores_beside_the_binary_are_found_when_a_bundle_flattened_them() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin_dir = tmp.path().join("runtime");
+        let retroarch = plant(&bin_dir, "retroarch");
+        fs::write(bin_dir.join(core_file_name("mupen64plus_next")), b"x").unwrap();
+        let runner = Runner::new(tmp.path(), &tmp.path().join("_config"));
+        assert_eq!(runner.cores_for(&retroarch), Some(bin_dir));
     }
 
     #[test]
