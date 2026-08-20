@@ -1,0 +1,33 @@
+# Build artifacts
+target/
+**/target/
+Cargo.lock
+
+# Tauri artifacts
+src-tauri/target/
+src-tauri/icons/
+src-tauri/icons/icon-*.png
+src-tauri/icons/icon.icns
+src-tauri/icons/icon.ico
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node
+node_modules/
+dist/
+
+# Logs
+*.log
+
+# Secrets
+src-tauri/tauri.conf.json

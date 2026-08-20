@@ -1,0 +1,22 @@
+[package]
+name = "den-intake"
+description = "Unpack, identify, repair, file, and report for Den"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+den-ident = { path = "../den-ident" }
+den-db = { path = "../den-db" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true
+tempfile.workspace = true
+zip.workspace = true
+sevenz-rust.workspace = true
+tar.workspace = true
+flate2.workspace = true
+
+[dev-dependencies]

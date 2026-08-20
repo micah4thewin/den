@@ -1,0 +1,438 @@
+/* Den desktop layout.
+ *
+ * Greyscale by rule. The chrome has no accent colour anywhere, so the only
+ * colour on screen is box art itself, sitting on flat paper like prints in
+ * a frame shop. Intake status is words in sunken wells; a long operation
+ * breathes instead of spinning; emphasis is inversion.
+ *
+ * Three materials only, from base.css: raised is what you press, sunken is
+ * what you drop into or read a result from, flat is the shelf the games sit
+ * on.
+ */
+
+/* ---- shell ------------------------------------------------------------ */
+
+.shell {
+  display: flex;
+  height: 100vh;
+  background: var(--canvas);
+}
+
+/* The sidebar is a raised island of systems, not a drawn menu. */
+.sidebar {
+  flex: 0 0 14.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-3);
+  padding: var(--gap-4);
+  margin: var(--gap-4);
+  margin-right: 0;
+  background: var(--surface);
+  box-shadow: var(--lift-1);
+  border-radius: var(--r-3);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
+  padding: var(--gap-2);
+}
+
+.brand-mark {
+  width: 1.9rem;
+  height: 1.9rem;
+  color: var(--text-1);
+}
+
+.brand-mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-1);
+}
+
+.nav button {
+  justify-content: flex-start;
+  width: 100%;
+  padding: 0.55em 0.8em;
+}
+
+.nav button svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.nav button[aria-current="page"] {
+  background: var(--active);
+  box-shadow: var(--press-1);
+  font-weight: var(--w-bold);
+}
+
+.sidebar .quiet {
+  margin-top: auto;
+  padding: var(--gap-2);
+  word-break: break-all;
+}
+
+/* ---- main -------------------------------------------------------------- */
+
+.main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--gap-4) var(--gap-5) var(--gap-5);
+  overflow-y: auto;
+}
+
+.screen {
+  display: none;
+  flex: 1 1 auto;
+}
+
+.screen.active {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-5);
+}
+
+.screen-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap-3);
+  flex-wrap: wrap;
+}
+
+.screen-head h1 {
+  font-size: 1.6rem;
+}
+
+.screen-head .spacer { flex: 1 1 auto; }
+
+/* ---- library ------------------------------------------------------------ */
+
+.row-band { display: flex; flex-direction: column; gap: var(--gap-3); }
+
+.row-band > h2 {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: var(--gap-3);
+}
+
+/* A game tile is flat paper: art above, a quiet word below. */
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--r-3);
+  cursor: pointer;
+  text-align: left;
+  align-items: stretch;
+}
+
+.tile:hover:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.tile .art {
+  aspect-ratio: 3 / 4;
+  border-radius: var(--r-2);
+  background: var(--surface);
+  box-shadow: var(--lift-1);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
+}
+
+.tile:hover .art {
+  box-shadow: var(--lift-2);
+  transform: translateY(-2px);
+}
+
+.tile .art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* A tile with no art still reads: the title sits on the quiet tile. */
+.tile .art .no-art {
+  padding: var(--gap-3);
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 0.9rem;
+  text-align: center;
+  color: var(--text-2);
+  word-break: break-word;
+}
+
+.tile .title {
+  font-size: 0.84rem;
+  line-height: 1.3;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile .subtitle {
+  font-size: 0.74rem;
+  color: var(--text-3);
+}
+
+/* ---- game --------------------------------------------------------------- */
+
+.game-layout {
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  gap: var(--gap-5);
+}
+
+.game-art {
+  aspect-ratio: 3 / 4;
+  border-radius: var(--r-3);
+  background: var(--surface);
+  box-shadow: var(--lift-2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.game-art .no-art {
+  padding: var(--gap-4);
+  font-family: var(--font-display);
+  font-weight: 300;
+  text-align: center;
+  color: var(--text-2);
+  word-break: break-word;
+}
+
+.game-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+}
+
+.game-meta h1 { font-size: 1.9rem; }
+
+.game-meta .system-word {
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+
+/* The play button is the one solid thing on the page. */
+.play-row { display: flex; gap: var(--gap-2); flex-wrap: wrap; }
+
+.game-meta .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-1);
+}
+
+.extra-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-1);
+}
+
+.extra-list li {
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+
+/* ---- intake -------------------------------------------------------------- */
+
+.dropzone {
+  flex: 1 1 auto;
+  min-height: 14rem;
+  border: none;
+  border-radius: var(--r-3);
+  background: var(--sunken);
+  box-shadow: var(--press-1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-3);
+  padding: var(--gap-6);
+  text-align: center;
+  transition: box-shadow var(--dur-2) var(--ease);
+}
+
+.dropzone.drag-over {
+  box-shadow: var(--press-2), 0 0 0 2px var(--ring);
+}
+
+.dropzone svg {
+  width: 2.6rem;
+  height: 2.6rem;
+  color: var(--text-3);
+}
+
+.dropzone .big-word {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 1.3rem;
+}
+
+.report-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: var(--r-3);
+  background: var(--sunken);
+  box-shadow: var(--press-1);
+  overflow: hidden;
+}
+
+.report-card h2 {
+  padding: var(--gap-3) var(--gap-4);
+  font-size: 0.82rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--edge);
+}
+
+.report-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-3);
+  padding: var(--gap-2) var(--gap-4);
+  border-bottom: 1px solid var(--edge);
+}
+
+.report-entry:last-child { border-bottom: none; }
+
+.report-entry .word {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: var(--w-bold);
+  letter-spacing: 0.03em;
+  padding: 0.15em 0.6em;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: var(--lift-1);
+}
+
+.report-entry .file {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-entry .reason {
+  font-size: 0.76rem;
+  color: var(--text-2);
+}
+
+/* ---- controllers --------------------------------------------------------- */
+
+.pad-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--gap-4);
+}
+
+.pad-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  padding: var(--gap-4);
+  background: var(--surface);
+  box-shadow: var(--lift-1);
+  border-radius: var(--r-3);
+}
+
+.pad-card .pad-name { font-weight: var(--w-bold); }
+
+.pad-card .pad-player { font-size: 0.8rem; color: var(--text-2); }
+
+/* A press-to-test pip: sunken by default, pressed in when the pad speaks. */
+.pips {
+  display: flex;
+  gap: var(--gap-2);
+  flex-wrap: wrap;
+}
+
+.pip {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: var(--r-pill);
+  background: var(--sunken);
+  box-shadow: var(--press-1);
+  transition: box-shadow var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease-soft);
+}
+
+.pip.lit {
+  background: var(--active);
+  box-shadow: var(--press-2);
+}
+
+/* ---- toast --------------------------------------------------------------- */
+
+.toast {
+  position: fixed;
+  bottom: var(--gap-4);
+  right: var(--gap-4);
+  max-width: 24rem;
+  padding: var(--gap-3) var(--gap-4);
+  border-radius: var(--r-2);
+  background: var(--solid);
+  color: var(--text-on-solid);
+  box-shadow: var(--lift-3);
+  animation: toast-in var(--dur-3) var(--ease) both;
+  font-size: 0.86rem;
+}
+
+/* A long operation breathes instead of spinning. */
+.breathe { animation: breathe 1.8s var(--ease-soft) infinite; }
+
+.empty {
+  padding: var(--gap-5);
+  text-align: center;
+  color: var(--text-2);
+  font-size: 0.9rem;
+}

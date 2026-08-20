@@ -1,0 +1,418 @@
+/* Design tokens.
+ *
+ * Two layers, and the split matters:
+ *
+ *   Seeds     The whole customization surface. A vault's theme.css sets
+ *             these and nothing else (plan §12.5), and the shipped values
+ *             here are the same ones lockbox-store writes into a new vault,
+ *             so the app does not change palette the moment one unlocks.
+ *
+ *   Semantic  aliases below, pointing at seeds with var(). Components read
+ *             only these, so a seed edit reaches every surface without any
+ *             stylesheet knowing about a component.
+ *
+ * Every seed is a literal rather than a colour derived from another with
+ * color-mix(): this ships to WKWebView on macOS 10.15 and iOS 13, which
+ * predate it, and a palette that silently collapses to nothing there is
+ * worse than a longer list here.
+ *
+ * Greyscale by rule, with one bounded exception. Colour never encodes
+ * provenance status -- status is always words (plan §12.5, LIMITATIONS.md)
+ * -- so every state must survive being printed in grey. Depth carries what
+ * colour would: raised is interactive, sunken is where you type, flat is
+ * where you read.
+ *
+ * The exception is syntax: the `--syn-*` seeds below tint code tokens and
+ * the two sides of a diff. That is not a judgement about anything, it is a
+ * label for what a run of characters *is*, and it is the one place where a
+ * reader is scanning structure rather than reading prose. They are held to
+ * three rules. They are desaturated -- calm enough to sit under text for
+ * hours, never a highlighter. They keep 4.5:1 against the surface they are
+ * drawn on in both modes. And nothing depends on them: every token also
+ * carries weight or slant, so code stays legible printed in grey, projected
+ * through a bad beamer, or read by someone who does not see the hue.
+ */
+
+/* ---- fonts (shared with hearth) ------------------------------------- */
+
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-Light.woff2") format("woff2"),
+       url("/fonts/Gilroy-Light.woff") format("woff");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-ExtraBold.woff2") format("woff2"),
+       url("/fonts/Gilroy-ExtraBold.woff") format("woff");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Avenir Next LT Pro";
+  src: url("/fonts/AvenirNextLTPro-Regular.woff2") format("woff2"),
+       url("/fonts/AvenirNextLTPro-Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Avenir Next LT Pro";
+  src: url("/fonts/AvenirNextLTPro-It.woff2") format("woff2"),
+       url("/fonts/AvenirNextLTPro-It.woff") format("woff");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Avenir Next LT Pro";
+  src: url("/fonts/AvenirNextLTPro-Bold.woff2") format("woff2"),
+       url("/fonts/AvenirNextLTPro-Bold.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---- handwriting, for the whiteboard --------------------------------- */
+
+/* Three faces under the SIL Open Font License, bundled rather than hoped
+ * for. What used to be here was a stack of names -- Virgil, Segoe Print,
+ * Bradley Hand -- that a machine either had or did not, and most do not:
+ * the board fell through to Comic Sans on Windows and to whatever the
+ * engine calls `cursive` everywhere else, which on Linux is usually
+ * nothing at all. A drawing that looks handwritten on the machine it was
+ * made on and typeset on the next one is not a drawing anybody trusts.
+ *
+ * `latin` and `latin-ext` only. See OFL-NOTICE.md in public/fonts. */
+
+@font-face {
+  font-family: "Caveat";
+  src: url("/fonts/Caveat-latin.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Caveat";
+  src: url("/fonts/Caveat-latin-ext.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Architects Daughter";
+  src: url("/fonts/ArchitectsDaughter-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Architects Daughter";
+  src: url("/fonts/ArchitectsDaughter-latin-ext.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Patrick Hand";
+  src: url("/fonts/PatrickHand-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Patrick Hand";
+  src: url("/fonts/PatrickHand-latin-ext.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+/* ---- seeds: light ---------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+  --bg: #e8eaed;
+  --panel: #edeff2;
+  --page: #f2f4f6;
+  --sunken: #e1e4e8;
+  --hover: #e4e7eb;
+  --active: #dcdfe4;
+  --fg: #1b1d20;
+  --muted: #5b6067;
+  --faint: #50565e;
+  --line: #d3d7dd;
+  --focus: #1b1d20;
+  /* The two halves of a soft-light surface: where it falls away from the
+   * light, and where it catches it. Neumorphism is only these two. */
+  --shade: rgba(157, 165, 176, 0.5);
+  --glow: rgba(255, 255, 255, 0.92);
+  --overlay: rgba(226, 229, 233, 0.72);
+  --selection: rgba(27, 29, 32, 0.14);
+
+  /* Syntax, light. Muted enough to read as ink with a cast to it. */
+  --syn-keyword: #5f5192;
+  --syn-type: #2f6a66;
+  --syn-def: #35618f;
+  --syn-string: #3d6639;
+  --syn-literal: #8a5626;
+  --syn-comment: #6d747d;
+  --syn-meta: #7a5c2e;
+  --syn-heading: #2c5580;
+  --syn-added: #3d6639;
+  --syn-removed: #8f3f3a;
+  --syn-added-wash: rgba(61, 102, 57, 0.17);
+  --syn-removed-wash: rgba(143, 63, 58, 0.17);
+}
+
+/* ---- seeds: dark ----------------------------------------------------- */
+
+/* Plain `:root` specificity, so a vault's theme.css -- which loads after
+ * this file and uses the same selector -- still wins when the user has not
+ * chosen a mode by hand. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #1c1e21;
+    --panel: #212428;
+    --page: #191b1e;
+    --sunken: #141619;
+    --hover: #262a2f;
+    --active: #2c3036;
+    --fg: #e7eaee;
+    --muted: #a2a9b2;
+    --faint: #929aa0;
+    --line: #303439;
+    --focus: #e7eaee;
+    --shade: rgba(0, 0, 0, 0.55);
+    --glow: rgba(255, 255, 255, 0.045);
+    --overlay: rgba(14, 16, 18, 0.72);
+    --selection: rgba(231, 234, 238, 0.16);
+
+    /* Syntax, dark. Lifted for the darker page, still nothing that glows. */
+    --syn-keyword: #b5a4dd;
+    --syn-type: #7cc0b7;
+    --syn-def: #8ab4e0;
+    --syn-string: #a3c58f;
+    --syn-literal: #d6a874;
+    --syn-comment: #7b838d;
+    --syn-meta: #cfae7e;
+    --syn-heading: #9dbfe3;
+    --syn-added: #a3c58f;
+    --syn-removed: #e0908a;
+    --syn-added-wash: rgba(163, 197, 143, 0.19);
+    --syn-removed-wash: rgba(224, 144, 138, 0.19);
+  }
+}
+
+/* An explicit choice outranks both blocks above and the vault's own, by
+ * specificity rather than by order. Picking a mode by hand is a statement
+ * about this screen right now, and theme.css cannot know which half of
+ * itself the user meant. Leaving the mode on "system" hands control back. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #e8eaed;
+  --panel: #edeff2;
+  --page: #f2f4f6;
+  --sunken: #e1e4e8;
+  --hover: #e4e7eb;
+  --active: #dcdfe4;
+  --fg: #1b1d20;
+  --muted: #5b6067;
+  --faint: #50565e;
+  --line: #d3d7dd;
+  --focus: #1b1d20;
+  --shade: rgba(157, 165, 176, 0.5);
+  --glow: rgba(255, 255, 255, 0.92);
+  --overlay: rgba(226, 229, 233, 0.72);
+  --selection: rgba(27, 29, 32, 0.14);
+
+  /* Syntax, light. Muted enough to read as ink with a cast to it. */
+  --syn-keyword: #5f5192;
+  --syn-type: #2f6a66;
+  --syn-def: #35618f;
+  --syn-string: #3d6639;
+  --syn-literal: #8a5626;
+  --syn-comment: #6d747d;
+  --syn-meta: #7a5c2e;
+  --syn-heading: #2c5580;
+  --syn-added: #3d6639;
+  --syn-removed: #8f3f3a;
+  --syn-added-wash: rgba(61, 102, 57, 0.17);
+  --syn-removed-wash: rgba(143, 63, 58, 0.17);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1c1e21;
+  --panel: #212428;
+  --page: #191b1e;
+  --sunken: #141619;
+  --hover: #262a2f;
+  --active: #2c3036;
+  --fg: #e7eaee;
+  --muted: #a2a9b2;
+  --faint: #929aa0;
+  --line: #303439;
+  --focus: #e7eaee;
+  --shade: rgba(0, 0, 0, 0.55);
+  --glow: rgba(255, 255, 255, 0.045);
+  --overlay: rgba(14, 16, 18, 0.72);
+  --selection: rgba(231, 234, 238, 0.16);
+
+  /* Syntax, dark. Lifted for the darker page, still nothing that glows. */
+  --syn-keyword: #b5a4dd;
+  --syn-type: #7cc0b7;
+  --syn-def: #8ab4e0;
+  --syn-string: #a3c58f;
+  --syn-literal: #d6a874;
+  --syn-comment: #7b838d;
+  --syn-meta: #cfae7e;
+  --syn-heading: #9dbfe3;
+  --syn-added: #a3c58f;
+  --syn-removed: #e0908a;
+  --syn-added-wash: rgba(163, 197, 143, 0.19);
+  --syn-removed-wash: rgba(224, 144, 138, 0.19);
+}
+
+/* ---- semantic aliases ------------------------------------------------ */
+
+:root {
+  --canvas: var(--bg);
+  --surface: var(--panel);
+  --edge: var(--line);
+  --ring: var(--focus);
+  --text-1: var(--fg);
+  --text-2: var(--muted);
+  /*
+   * The three text weights all have to be readable. `--text-3` is the
+   * quietest, used for pane titles, inactive tabs, and the zoom readout --
+   * and it was set to a grey that came out at 2.5:1 on the surfaces it
+   * actually sits on, well under the 4.5:1 that plan §12.6's WCAG 2.2 AA
+   * commitment requires for text this size. It looked like a hierarchy and
+   * read as unreadable. The a11y run in CI found it.
+   *
+   * Quiet now means darker in light mode and lighter in dark mode rather
+   * than lower contrast. If a future value needs checking, the run is
+   * `npm run a11y`.
+   */
+  --text-3: var(--faint);
+  --text-on-solid: var(--bg);
+  --solid: var(--fg);
+}
+
+/* ---- depth ----------------------------------------------------------- */
+
+:root {
+  --lift-1: 2px 2px 5px var(--shade), -2px -2px 5px var(--glow);
+  --lift-2: 4px 4px 10px var(--shade), -3px -3px 9px var(--glow);
+  --lift-3: 8px 8px 22px var(--shade), -6px -6px 18px var(--glow);
+  --lift-4: 14px 18px 44px var(--shade), -10px -10px 30px var(--glow);
+  --press-1: inset 2px 2px 4px var(--shade), inset -2px -2px 4px var(--glow);
+  --press-2: inset 3px 3px 7px var(--shade), inset -3px -3px 7px var(--glow);
+  /* A hairline that reads as a seam in the material rather than a drawn
+   * line: light on top, shadow underneath. */
+  --seam: inset 0 1px 0 var(--glow), inset 0 -1px 0 var(--shade);
+}
+
+/* ---- shape, rhythm, motion ------------------------------------------- */
+
+:root {
+  --r-1: 6px;
+  --r-2: 10px;
+  --r-3: 14px;
+  --r-4: 20px;
+  --r-pill: 999px;
+
+  --gap-1: 0.25rem;
+  --gap-2: 0.5rem;
+  --gap-3: 0.75rem;
+  --gap-4: 1rem;
+  --gap-5: 1.5rem;
+  --gap-6: 2.25rem;
+
+  /* Calm, not sluggish: everything settles rather than stopping dead. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --dur-4: 480ms;
+
+  --font-display: "Gilroy", "Avenir Next LT Pro", system-ui, sans-serif;
+  --font-ui: "Avenir Next LT Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace;
+  --font-serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  /* Handwriting, for a whiteboard. Excalidraw's own Virgil first, so a
+   * scene drawn there and opened here is the scene that was drawn; then
+   * Architects Daughter, which is bundled and is the closest of the three
+   * to Virgil's marker. Everything after it is a machine that has one of
+   * these already and a reader who would rather see it. */
+  --font-hand: "Virgil", "Excalifont", "Architects Daughter", "Segoe Print",
+    "Bradley Hand", "Chalkboard SE", cursive;
+  /* The other two hands, each its own choice on the board rather than a
+   * fallback: Caveat joins its letters and slants, Patrick Hand prints
+   * upright and reads at a distance. */
+  --font-script: "Caveat", "Segoe Script", "Bradley Hand", cursive;
+  --font-print: "Patrick Hand", "Comic Sans MS", "Chalkboard SE", cursive;
+
+  /* Avenir ships Regular and Bold only; asking for anything between them
+   * gets a synthesized weight that looks smudged at small sizes. */
+  --w-normal: 400;
+  --w-bold: 700;
+
+  /* The whole interface scales from here (Ctrl +/-/0). */
+  --ui-scale: 1;
+  --pane-left: 15.5rem;
+  --pane-right: 20rem;
+  /* The text column fills its pane unless Settings narrows it. See
+   * ui/prefs.ts, which writes this before the first paint. */
+  --measure: 100%;
+}
+
+/* Nothing in a calm interface should move for someone who asked it not to.
+ * Durations collapse to instant here rather than being fought with
+ * `!important` at every site that animates. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 1ms;
+    --dur-2: 1ms;
+    --dur-3: 1ms;
+    --dur-4: 1ms;
+    --ease-spring: var(--ease-soft);
+  }
+}

@@ -1,0 +1,173 @@
+/* Motion.
+ *
+ * One rule holds everything here together: nothing appears, moves, or
+ * leaves faster than the eye can follow it, and nothing draws attention it
+ * does not need. A writing surface that flickers is a writing surface
+ * nobody writes on.
+ *
+ * Every keyframe below settles rather than bouncing, except the one that
+ * confirms a deliberate press. Durations come from tokens, so
+ * prefers-reduced-motion collapses all of it in one place.
+ *
+ * No entrance here carries a fill mode, deliberately. Each one ends at the
+ * element's own styles, so `forwards` would buy nothing, and there are no
+ * delays to cover, so `backwards` would buy nothing either. What it does buy
+ * is that an animation which never gets to run -- inside a subtree skipped by
+ * `content-visibility`, or in a renderer that does not drive the clock --
+ * leaves the element as it was written rather than pinned at `opacity: 0`.
+ * An entrance is a flourish; content you cannot see is not.
+ */
+
+@keyframes settle-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.4rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes settle-down {
+  from {
+    opacity: 0;
+    transform: translateY(-0.4rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modals arrive from slightly behind the glass, never from off-screen:
+ * the eye keeps its place on the page underneath. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.9rem) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes lift-away {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.99);
+  }
+}
+
+/* The toast comes up out of the bottom edge and goes back into it. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 1.2rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes drawer-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+
+@keyframes drawer-in-right {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+
+/* A row entering a list that is already on screen. Staggered by index so a
+ * refreshed file tree reads as a list settling, not as a flash. */
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateX(-0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The one thing allowed to keep moving: work in progress. */
+@keyframes breathe {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+/* Confirming a save. A single soft pulse of depth, then still again. */
+@keyframes pulse-press {
+  0% { box-shadow: var(--lift-1); }
+  45% { box-shadow: var(--press-2); }
+  100% { box-shadow: var(--lift-1); }
+}
+
+.anim-rise { animation: rise var(--dur-3) var(--ease); }
+.anim-settle { animation: settle-in var(--dur-3) var(--ease); }
+.anim-fade { animation: fade-in var(--dur-2) var(--ease-soft); }
+
+/* An indeterminate bar for the one operation that genuinely takes time:
+ * Argon2id key derivation, which is slow on purpose (plan §10). */
+.progress-track {
+  position: relative;
+  height: 3px;
+  margin-top: var(--gap-3);
+  border-radius: var(--r-pill);
+  background: var(--sunken);
+  box-shadow: var(--press-1);
+  overflow: hidden;
+}
+
+.progress-track::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 33%;
+  border-radius: var(--r-pill);
+  background: var(--text-3);
+  animation: sweep 1.4s var(--ease-soft) infinite;
+}
+
+.working {
+  animation: breathe 1.8s var(--ease-soft) infinite;
+}
+
+/* A dot that says a document has unsaved edits, without saying it in red. */
+.dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--text-2);
+  flex: 0 0 auto;
+  animation: fade-in var(--dur-2) var(--ease-soft);
+}
+
+/* Reduced motion is answered in tokens.css by collapsing every duration to
+   1ms. What is left here is the pair of loops that carry their own literal
+   durations and would otherwise keep running at full speed. */
+@media (prefers-reduced-motion: reduce) {
+  .progress-track::after,
+  .working {
+    animation: none;
+  }
+}

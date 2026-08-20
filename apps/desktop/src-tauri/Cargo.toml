@@ -1,0 +1,30 @@
+[package]
+name = "den-desktop"
+description = "The Den desktop shell"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+# Deliberately outside the main workspace: Tauri drags in platform WebView
+# dependencies that the headless CI for the core crates should never build.
+[workspace]
+
+[lib]
+name = "den_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+den-core = { path = "../../../crates/den-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+env_logger = "0.11"
+rfd = "0.15"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

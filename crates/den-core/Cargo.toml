@@ -1,0 +1,18 @@
+[package]
+name = "den-core"
+description = "Glue the shell talks to for Den"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+den-ident = { path = "../den-ident" }
+den-intake = { path = "../den-intake" }
+den-db = { path = "../den-db" }
+den-runner = { path = "../den-runner" }
+den-input = { path = "../den-input" }
+serde.workspace = true
+thiserror.workspace = true
+dirs.workspace = true
+rusqlite.workspace = true

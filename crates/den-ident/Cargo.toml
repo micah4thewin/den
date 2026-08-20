@@ -1,0 +1,16 @@
+[package]
+name = "den-ident"
+description = "Hashing, magic bytes, and the DAT index for Den"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+sha1.workspace = true
+crc32fast.workspace = true
+serde.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

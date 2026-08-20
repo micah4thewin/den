@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Den</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<!--
+  Structure only. Every icon is put in from src/ui/icons.ts rather than
+  inlined here, so one glyph is defined once and a button carries the label
+  a screen reader reads instead of a picture it cannot.
+-->
+<body>
+  <div class="shell" id="shell">
+    <aside class="sidebar" aria-label="Systems">
+      <div class="brand">
+        <span class="brand-mark" id="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">Den</span>
+      </div>
+      <nav class="nav" id="nav" aria-label="Screens"></nav>
+      <p class="quiet" id="library-path" title="Library directory"></p>
+    </aside>
+
+    <main class="main" id="main">
+      <section class="screen" id="screen-library" data-screen="library">
+        <div class="screen-head">
+          <h1>Library</h1>
+          <span class="quiet" id="game-count"></span>
+          <span class="spacer"></span>
+          <button type="button" id="btn-refresh" class="icon-btn" aria-label="Refresh the library">
+            <span data-icon="refresh"></span>
+          </button>
+        </div>
+        <div class="row-band" id="continue-band" hidden>
+          <h2>Continue where you left off</h2>
+          <div class="shelf" id="continue-shelf"></div>
+        </div>
+        <div class="row-band" id="recent-band" hidden>
+          <h2>Recent</h2>
+          <div class="shelf" id="recent-shelf"></div>
+        </div>
+        <div class="row-band">
+          <h2>Shelves</h2>
+          <div id="shelves"></div>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-game" data-screen="game">
+        <div class="screen-head">
+          <button type="button" id="btn-back" class="icon-btn" aria-label="Back to the library">
+            <span data-icon="back"></span>
+          </button>
+          <span class="spacer"></span>
+        </div>
+        <div class="game-layout" id="game-layout"></div>
+      </section>
+
+      <section class="screen" id="screen-intake" data-screen="intake">
+        <div class="screen-head">
+          <h1>Intake</h1>
+          <span class="quiet">Drop a pile of downloads; every file gets a word.</span>
+        </div>
+        <div class="dropzone" id="dropzone" role="button" tabindex="0"
+             aria-label="Drop files here to add them to the library">
+          <span data-icon="folder"></span>
+          <span class="big-word">Drop files or folders here</span>
+          <span class="quiet" id="drop-hint">Every original stays untouched. Nothing is deleted.</span>
+        </div>
+        <div class="row">
+          <button type="button" id="btn-choose">Choose a folder…</button>
+          <span class="quiet" id="intake-status" role="status" aria-live="polite"></span>
+        </div>
+        <div class="report-card hidden" id="report-card"></div>
+      </section>
+
+      <section class="screen" id="screen-controllers" data-screen="controllers">
+        <div class="screen-head">
+          <h1>Controllers</h1>
+          <span class="quiet">Plug in anything shaped like a gamepad.</span>
+        </div>
+        <div class="pad-cards" id="pad-cards"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
