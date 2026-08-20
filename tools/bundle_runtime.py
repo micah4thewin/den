@@ -124,13 +124,29 @@ def system_candidates():
 
 
 def find_system_retroarch():
+    """The RetroArch on this machine, as found -- symlinks left alone.
+
+    `realpath` here would turn the Flatpak and Snap wrappers into
+    `/usr/bin/flatpak` and `/usr/bin/snap`, which behave like RetroArch only
+    because they look at the name they were invoked under.
+    """
     override = os.environ.get("RETROARCH")
     if override and os.path.isfile(override) and os.access(override, os.X_OK):
-        return os.path.realpath(override)
+        return override
     for candidate in system_candidates():
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return os.path.realpath(candidate)
+            return candidate
     return None
+
+
+def is_a_wrapper(path):
+    """Whether this is a launcher that starts RetroArch rather than RetroArch.
+
+    Copying one into a bundle gets you a file that needs the very thing the
+    bundle exists to avoid needing.
+    """
+    target = os.path.basename(os.path.realpath(path)).lower()
+    return target in ("flatpak", "snap")
 
 
 def find_core_dir(retroarch):
@@ -224,7 +240,17 @@ def stage_from_system(dest, want_cores):
             "No RetroArch found on this machine.\n"
             "Install one, or use --from-archive with a download."
         )
+    if is_a_wrapper(retroarch):
+        raise SystemExit(
+            f"{retroarch} is a launcher, not RetroArch itself\n"
+            f"  (it runs {os.path.realpath(retroarch)}).\n"
+            "Copying it into a bundle would ship a file that needs the very\n"
+            "thing the bundle exists to avoid needing. Download a portable\n"
+            "build and pass it with --from-archive instead."
+        )
     log(f"  binary   {retroarch}")
+    log("  note     a system RetroArch is linked against this machine's")
+    log("           libraries; use --from-archive for a bundle to hand on")
     os.makedirs(dest, exist_ok=True)
     target = os.path.join(dest, "retroarch.exe" if sys.platform == "win32" else "retroarch")
     shutil.copy2(retroarch, target)
@@ -337,12 +363,21 @@ def main():
     parser.add_argument("--record", action="store_true", help="with --from-manifest, pin the hash of what was downloaded")
     parser.add_argument("--check", action="store_true", help="say what is here and what would be staged, and change nothing")
     parser.add_argument("--allow-missing", action="store_true", help="exit 0 when there is nothing to stage (for builds)")
+    parser.add_argument("--keep-existing", action="store_true", help="leave an already-staged runtime alone (for builds)")
     args = parser.parse_args()
 
     if args.check:
         return check(args.into)
 
     dest = args.into
+    # A build must never destroy a runtime that was staged on purpose. The
+    # release flow is `--from-archive <portable build>` and then a build; if
+    # the build re-staged from this machine it would silently swap a portable
+    # RetroArch for a natively linked one.
+    already = find_binary(dest) if os.path.isdir(dest) else None
+    if args.keep_existing and already:
+        log(f"Keeping the runtime already staged at {os.path.relpath(already, ROOT)}")
+        return 0
     clear(dest)
     os.makedirs(dest, exist_ok=True)
 

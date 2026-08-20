@@ -10,7 +10,7 @@
     "tauri": "tauri",
     "deb": "tauri build --bundles deb",
     "preview": "vite preview",
-    "bundle:runtime": "python3 ../../tools/bundle_runtime.py --allow-missing",
+    "bundle:runtime": "python3 ../../tools/bundle_runtime.py --allow-missing --keep-existing",
     "runtime:check": "python3 ../../tools/bundle_runtime.py --check",
     "doctor": "cargo run -q -p den-doctor --manifest-path ../../Cargo.toml"
   },

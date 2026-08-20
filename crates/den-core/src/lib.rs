@@ -69,6 +69,16 @@ pub struct RetroArchStatus {
     pub runtime_dir: String,
 }
 
+/// What Den knows about the libretro core a game needs.
+#[derive(Debug, Serialize)]
+pub struct CoreStatus {
+    /// The core Den would ask RetroArch for.
+    pub name: String,
+    /// Whether it is installed. `None` when Den could not find a cores
+    /// directory to look in, and so has nothing honest to say either way.
+    pub installed: Option<bool>,
+}
+
 /// The library setting holding a RetroArch picked by hand.
 const RETROARCH_SETTING: &str = "retroarch_path";
 
@@ -157,11 +167,7 @@ impl Den {
         ) {
             return Err(Error::External(game.system.clone()));
         }
-        let core = game.core.clone().unwrap_or_else(|| {
-            system
-                .map(|s| s.default_core().to_string())
-                .unwrap_or_default()
-        });
+        let core = core_for(&game);
         self.reap();
         let process = self.runner.launch(&game, &core)?;
         let pid = process.pid();
@@ -259,6 +265,17 @@ impl Den {
         }
     }
 
+    /// The core a game would launch with, and whether it is installed.
+    pub fn core_status(&self, game: &Game) -> CoreStatus {
+        let name = core_for(game);
+        let installed = if name.is_empty() {
+            Some(false)
+        } else {
+            self.runner.core_installed(&name)
+        };
+        CoreStatus { name, installed }
+    }
+
     /// Tell Den where this build's bundled runtime lives. The shell calls
     /// this once at startup with the directory Tauri resolved for it.
     pub fn set_runtime_dir(&self, dir: Option<PathBuf>) {
@@ -273,7 +290,9 @@ impl Den {
     pub fn set_retroarch_path(&self, path: Option<PathBuf>) -> Result<RetroArchStatus, Error> {
         match path {
             Some(path) => {
-                let path = std::fs::canonicalize(&path).unwrap_or(path);
+                // Kept as picked, not canonicalized: resolving the symlink
+                // behind a Flatpak or Snap wrapper turns it into the
+                // multiplexer it points at, which is not RetroArch.
                 self.runner.set_chosen(Some(path.clone()));
                 if let Err(e) = self.runner.locate() {
                     // Put it back the way it was rather than leaving the
@@ -323,6 +342,17 @@ fn log_session_error(e: &rusqlite::Error) {
     // den-core has no logger of its own; the shell installs one and this is
     // the only line that would use it, so it goes to stderr plainly.
     eprintln!("den: could not record the play session: {e}");
+}
+
+/// The core a game launches with: its own override, else its system's
+/// default. One function, so what the interface reports and what the runner
+/// asks for can never drift apart.
+fn core_for(game: &Game) -> String {
+    game.core.clone().unwrap_or_else(|| {
+        system_from_name(&game.system)
+            .map(|s| s.default_core().to_string())
+            .unwrap_or_default()
+    })
 }
 
 fn load_dat(library: &Path) -> Index {

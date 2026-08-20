@@ -128,9 +128,17 @@ fn main() {
 
 /// Which of the cores Den would ask for are actually installed.
 fn report_cores(den: &Den, retroarch: &Path) {
+    println!("\nRetroArch's own configuration");
+    match den_runner::user_config(retroarch) {
+        Some(config) => println!("  {}", config.display()),
+        None => println!("  none found — Den cannot read where your cores are"),
+    }
+
     let Some(dir) = den.runner().cores_for(retroarch) else {
         println!("\nCores");
-        println!("  no cores directory found next to that RetroArch");
+        println!("  No cores directory found. Den will pass RetroArch the core");
+        println!("  file name and let it resolve one; if that fails, RetroArch");
+        println!("  says `Fatal error received in: \"init_libretro_symbols()\"`.");
         return;
     };
     println!("\nCores  ({})", dir.display());
@@ -161,7 +169,9 @@ fn report_cores(den: &Den, retroarch: &Path) {
     if !missing.is_empty() {
         println!(
             "\n  A missing core is not a Den problem: RetroArch downloads cores itself,\n\
-             under Main Menu → Online Updater → Core Downloader."
+             under Main Menu → Online Updater → Core Downloader. Den refuses to\n\
+             launch a game whose core is not there, rather than letting RetroArch\n\
+             die with `init_libretro_symbols()`."
         );
     }
 }

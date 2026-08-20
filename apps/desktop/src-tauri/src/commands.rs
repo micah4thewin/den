@@ -3,7 +3,7 @@
 //! filesystem directly; it asks Den, which owns the library.
 
 use crate::{with_den, AppState, CommandResult};
-use den_core::{ControllerInfo, Game, LaunchInfo, Report, RetroArchStatus, Save};
+use den_core::{ControllerInfo, CoreStatus, Game, LaunchInfo, Report, RetroArchStatus, Save};
 use serde::Serialize;
 use std::path::Path;
 use tauri::State;
@@ -34,6 +34,8 @@ pub(crate) struct GameView {
     /// Carried here too: Play lives on this screen, so this is where somebody
     /// needs to be told it cannot work yet.
     pub(crate) retroarch: RetroArchStatus,
+    /// And which core this game needs, and whether it is there.
+    pub(crate) core: CoreStatus,
 }
 
 #[tauri::command]
@@ -74,10 +76,12 @@ pub(crate) fn get_game(state: State<'_, AppState>, id: i64) -> CommandResult<Gam
             .map_err(|e| e.to_string())?
             .ok_or("game not found")?;
         let saves = den.db().list_saves(id).map_err(|e| e.to_string())?;
+        let core = den.core_status(&game);
         Ok(GameView {
             game,
             saves,
             retroarch: den.retroarch_status(),
+            core,
         })
     })
 }

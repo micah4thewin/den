@@ -219,6 +219,50 @@ def test_allow_missing(tmp):
     )
 
 
+def test_keep_existing(tmp):
+    """A build must not destroy a runtime staged on purpose for a release."""
+    dest = os.path.join(tmp, "staged-keep")
+    os.makedirs(dest, exist_ok=True)
+    portable = plant_retroarch(dest)
+    with open(portable, "w", encoding="utf-8") as handle:
+        handle.write("#!/bin/sh\n# the portable one\n")
+    os.chmod(portable, 0o755)
+
+    other = os.path.join(tmp, "keep-prefix", "bin")
+    plant_retroarch(other)
+    result = run(
+        ["--from-system", "--into", dest, "--keep-existing", "--allow-missing"],
+        env={"PATH": other + os.pathsep + os.environ.get("PATH", ""), "RETROARCH": ""},
+    )
+    check("--keep-existing leaves a staged runtime alone", result.returncode == 0, result.stderr)
+    with open(portable, encoding="utf-8") as handle:
+        kept = "the portable one" in handle.read()
+    check("  and does not restage over it", kept)
+
+
+def test_wrapper_is_refused(tmp):
+    """A Flatpak/Snap wrapper must not be bundled as if it were RetroArch."""
+    real = os.path.join(tmp, "wrapper-real", "flatpak")
+    os.makedirs(os.path.dirname(real), exist_ok=True)
+    with open(real, "w", encoding="utf-8") as handle:
+        handle.write("#!/bin/sh\nexit 1\n")
+    os.chmod(real, 0o755)
+
+    exports = os.path.join(tmp, "wrapper-exports")
+    os.makedirs(exports, exist_ok=True)
+    os.symlink(real, os.path.join(exports, "org.libretro.RetroArch"))
+
+    dest = os.path.join(tmp, "staged-wrapper")
+    result = run(
+        ["--from-system", "--into", dest],
+        env={"PATH": exports + os.pathsep + os.environ.get("PATH", ""), "RETROARCH": ""},
+        expect=1,
+    )
+    out = result.stdout + result.stderr
+    check("a launcher is not bundled as RetroArch", result.returncode == 1, out)
+    check("  and the message says to use --from-archive", "--from-archive" in out, out)
+
+
 def test_readme_survives(tmp):
     """The committed README that keeps the directory in a fresh clone."""
     dest = os.path.join(tmp, "staged-readme")
@@ -248,6 +292,8 @@ def main():
         test_manifest_download(tmp)
         test_allow_missing(tmp)
         test_readme_survives(tmp)
+        test_keep_existing(tmp)
+        test_wrapper_is_refused(tmp)
     if FAILURES:
         print(f"\n{len(FAILURES)} failed")
         return 1

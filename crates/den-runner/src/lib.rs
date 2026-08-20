@@ -39,11 +39,23 @@ pub enum RunnerError {
     )]
     NotFound,
     /// `RETROARCH` is set, and points at something that cannot be run.
-    #[error("RETROARCH is set to `{0}`, which is not a program Den can run")]
-    OverrideNotRunnable(String),
+    #[error("RETROARCH is set to `{0}`, which {1}")]
+    OverrideNotRunnable(String, &'static str),
     /// A path was chosen in the interface and no longer works.
-    #[error("the chosen RetroArch, `{0}`, is not there any more")]
-    ChosenNotRunnable(String),
+    #[error("the chosen RetroArch, `{0}`, {1}")]
+    ChosenNotRunnable(String, &'static str),
+    /// RetroArch is there, but the core this game needs is not installed.
+    #[error(
+        "the `{core}` core is not installed. RetroArch downloads cores itself: \
+         open it, then Main Menu -> Online Updater -> Core Downloader, and get \
+         `{core}`. Den looked in {dir}"
+    )]
+    CoreMissing {
+        /// The libretro core Den asked for.
+        core: String,
+        /// The directory it looked in.
+        dir: String,
+    },
     /// The filesystem or the spawn said no.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -197,7 +209,9 @@ impl Runner {
                     path,
                     source: Source::Chosen,
                 })
-                .ok_or_else(|| RunnerError::ChosenNotRunnable(chosen.display().to_string()));
+                .ok_or_else(|| {
+                    RunnerError::ChosenNotRunnable(chosen.display().to_string(), why_not(&chosen))
+                });
         }
         if let Some(raw) = explicit_override() {
             return runnable(&raw)
@@ -205,7 +219,9 @@ impl Runner {
                     path,
                     source: Source::Environment,
                 })
-                .ok_or_else(|| RunnerError::OverrideNotRunnable(raw.display().to_string()));
+                .ok_or_else(|| {
+                    RunnerError::OverrideNotRunnable(raw.display().to_string(), why_not(&raw))
+                });
         }
         for dir in runtime_dirs(self.bundled_dir(), &self.managed_dir) {
             for name in binary_names() {
@@ -256,6 +272,14 @@ impl Runner {
         core_dir(retroarch)
     }
 
+    /// Whether a named core is installed: `None` when Den cannot tell,
+    /// because it never found a cores directory to look in.
+    pub fn core_installed(&self, core: &str) -> Option<bool> {
+        let retroarch = self.locate().ok()?;
+        let dir = core_dir(&retroarch.path)?;
+        Some(dir.join(core_file_name(core)).is_file())
+    }
+
     /// Launch a game with a libretro core, fullscreen, private config.
     pub fn launch(&self, game: &Game, core: &str) -> Result<Running, RunnerError> {
         let retroarch = self.locate()?.path;
@@ -264,12 +288,28 @@ impl Runner {
         fs::create_dir_all(&self.state_dir)?;
 
         let cores = core_dir(&retroarch);
+
+        // Say what is wrong before RetroArch does. Handed a core it cannot
+        // open, RetroArch dies with `Fatal error received in:
+        // "init_libretro_symbols()"`, which tells somebody nothing about
+        // which core, or that cores are a thing they have to download.
+        if let Some(dir) = cores.as_deref() {
+            let file = core_file_name(core);
+            if !dir.join(&file).is_file() {
+                return Err(RunnerError::CoreMissing {
+                    core: core.to_string(),
+                    dir: dir.display().to_string(),
+                });
+            }
+        }
+
         let config_path = self.config_dir.join(format!("den-{}.cfg", game.id));
         write_config(
             &config_path,
             &self.save_dir,
             &self.state_dir,
             cores.as_deref(),
+            user_config(&retroarch).as_deref(),
         )?;
 
         let mut cmd = Command::new(&retroarch);
@@ -312,9 +352,86 @@ fn core_argument(core: &str, cores: Option<&Path>) -> PathBuf {
     PathBuf::from(file)
 }
 
+/// RetroArch's own configuration file, if this install has one.
+///
+/// Worth finding for two reasons. It is the only authority on where this
+/// person's cores actually are -- `libretro_directory` is a setting, not
+/// something to be guessed at from a list of conventional paths. And Den
+/// launches with `--config`, which *replaces* their configuration rather than
+/// adding to it, so without reading it first every video, input and shader
+/// setting they ever chose is silently dropped for the duration of the game.
+pub fn user_config(retroarch: &Path) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    // A portable install keeps its config beside the binary.
+    if let Some(parent) = retroarch.parent() {
+        candidates.push(parent.join("retroarch.cfg"));
+    }
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(".config/retroarch/retroarch.cfg"));
+        candidates
+            .push(home.join(".var/app/org.libretro.RetroArch/config/retroarch/retroarch.cfg"));
+        candidates.push(home.join("snap/retroarch/current/.config/retroarch/retroarch.cfg"));
+        candidates.push(home.join("Library/Application Support/RetroArch/retroarch.cfg"));
+    }
+    if let Some(config) = dirs::config_dir() {
+        candidates.push(config.join("retroarch/retroarch.cfg"));
+    }
+    if let Some(data) = dirs::data_dir() {
+        candidates.push(data.join("RetroArch/retroarch.cfg"));
+    }
+    candidates.into_iter().find(|c| c.is_file())
+}
+
+/// The value of one key in a RetroArch config: `key = "value"`.
+fn config_value(text: &str, key: &str) -> Option<String> {
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('#') {
+            continue;
+        }
+        let (name, value) = line.split_once('=')?;
+        if name.trim() != key {
+            continue;
+        }
+        let value = value.trim().trim_matches('"').trim();
+        if value.is_empty() || value == "default" {
+            return None;
+        }
+        return Some(value.to_string());
+    }
+    None
+}
+
+/// A path out of a RetroArch config, with the shorthands it uses expanded:
+/// `~` for home, and a leading `:` for RetroArch's own install directory.
+fn config_path(raw: &str, retroarch: &Path) -> Option<PathBuf> {
+    let raw = raw.trim();
+    if let Some(rest) = raw.strip_prefix(":\\").or_else(|| raw.strip_prefix(":/")) {
+        return retroarch.parent().map(|d| d.join(rest));
+    }
+    if let Some(rest) = raw.strip_prefix("~/") {
+        return dirs::home_dir().map(|h| h.join(rest));
+    }
+    if raw.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(raw))
+}
+
 /// The directory a RetroArch install keeps its cores in, if one can be found.
 fn core_dir(retroarch: &Path) -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // What RetroArch itself says, before anything Den would guess.
+    if let Some(config) = user_config(retroarch) {
+        if let Ok(text) = fs::read_to_string(&config) {
+            if let Some(dir) =
+                config_value(&text, "libretro_directory").and_then(|v| config_path(&v, retroarch))
+            {
+                candidates.push(dir);
+            }
+        }
+    }
 
     // Beside the binary is where portable and Windows installs put them.
     if let Some(parent) = retroarch.parent() {
@@ -389,14 +506,72 @@ pub fn is_runnable(path: &Path) -> bool {
     runnable(path).is_some()
 }
 
-/// `path` as an absolute path, if it is a file this process could execute.
+/// Why a path is not something Den can run, in words that say what to do.
+/// "Not there any more" for a file that is sitting right there, with only its
+/// executable bit missing, sends somebody looking in the wrong place.
+pub fn why_not(path: &Path) -> &'static str {
+    let resolved = app_bundle_binary(path).unwrap_or_else(|| path.to_path_buf());
+    if !resolved.exists() {
+        "is not there any more"
+    } else if resolved.is_dir() {
+        "is a directory, not a program"
+    } else if !is_executable(&resolved) {
+        "is not marked executable"
+    } else {
+        "cannot be run"
+    }
+}
+
+/// `path` as an absolute path, if it is something this process could execute.
+///
+/// Absolute, so `available()` and `launch()` cannot disagree because the
+/// working directory moved between them -- but **not** canonicalized. The
+/// Flatpak and Snap wrappers are symlinks to a multiplexer (`/usr/bin/flatpak`,
+/// `/usr/bin/snap`) that decides what to run by looking at the name it was
+/// invoked under. Resolving the link throws that name away and leaves Den
+/// spawning the multiplexer with RetroArch's arguments, which exits with a
+/// usage message while Den reports a successful launch.
 fn runnable(path: &Path) -> Option<PathBuf> {
-    if !path.is_file() || !is_executable(path) {
+    let path = app_bundle_binary(path).unwrap_or_else(|| path.to_path_buf());
+    if !path.is_file() || !is_executable(&path) {
         return None;
     }
-    // Absolute, so `available()` and `launch()` cannot disagree because the
-    // working directory moved between them.
-    Some(fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()))
+    Some(absolute(&path))
+}
+
+/// `path` made absolute without following any symlink along the way.
+fn absolute(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    std::env::current_dir()
+        .map(|cwd| cwd.join(path))
+        .unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// The program inside a macOS application bundle.
+///
+/// A file dialog on macOS hands back `/Applications/RetroArch.app`, because
+/// that is what a person sees and clicks. It is a directory, so taking it at
+/// face value means the one way out of "RetroArch was not found" refuses the
+/// only answer the platform will give.
+fn app_bundle_binary(path: &Path) -> Option<PathBuf> {
+    if path.extension()? != "app" || !path.is_dir() {
+        return None;
+    }
+    let macos = path.join("Contents").join("MacOS");
+    // The bundle's own name first -- RetroArch.app/Contents/MacOS/RetroArch --
+    // then whatever single program is in there.
+    let stem = path.file_stem()?.to_owned();
+    let named = macos.join(&stem);
+    if named.is_file() {
+        return Some(named);
+    }
+    fs::read_dir(&macos)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.is_file() && is_executable(p))
 }
 
 #[cfg(unix)]
@@ -634,15 +809,49 @@ fn under(home: &Option<PathBuf>, suffix: &str) -> Option<PathBuf> {
     home.as_ref().map(|h| h.join(suffix))
 }
 
+/// The keys Den sets for a session. Everything else is the person's own.
+const DEN_KEYS: &[&str] = &[
+    "video_fullscreen",
+    "input_autodetect_enable",
+    "savestate_auto_save",
+    "savestate_auto_load",
+    "savestate_auto_save_interval",
+    "savefile_directory",
+    "savestate_directory",
+    "rgui_show_start_screen",
+    "libretro_directory",
+];
+
+/// Write the private config for one session.
+///
+/// `--config` replaces RetroArch's configuration rather than adding to it, so
+/// this starts from the person's own file and overrides only the handful of
+/// keys Den has an opinion about. Otherwise every launch through Den would
+/// quietly discard their video driver, their pad bindings, their shaders --
+/// everything they set up in RetroArch itself.
 fn write_config(
     path: &Path,
     save_dir: &Path,
     state_dir: &Path,
     core_dir: Option<&Path>,
+    inherit: Option<&Path>,
 ) -> std::io::Result<()> {
-    let mut content = format!(
-        "# Den private session config (generated)\n\
-         video_fullscreen = \"true\"\n\
+    let mut content = String::new();
+    if let Some(theirs) = inherit.and_then(|p| fs::read_to_string(p).ok()) {
+        content.push_str("# Den session config: their RetroArch settings, then ours.\n");
+        for line in theirs.lines() {
+            let key = line.split_once('=').map(|(k, _)| k.trim()).unwrap_or("");
+            if DEN_KEYS.contains(&key) {
+                continue; // set below, so it is not set twice
+            }
+            content.push_str(line);
+            content.push('\n');
+        }
+        content.push('\n');
+    }
+    content.push_str("# Den, for this session\n");
+    content.push_str(&format!(
+        "video_fullscreen = \"true\"\n\
          input_autodetect_enable = \"true\"\n\
          savestate_auto_save = \"true\"\n\
          savestate_auto_load = \"false\"\n\
@@ -652,9 +861,7 @@ fn write_config(
          rgui_show_start_screen = \"false\"\n",
         save_dir.display(),
         state_dir.display()
-    );
-    // A config given with --config replaces the user's own, so a build that
-    // would have known where its cores live no longer does unless we say.
+    ));
     if let Some(cores) = core_dir {
         content.push_str(&format!("libretro_directory = \"{}\"\n", cores.display()));
     }
@@ -674,6 +881,7 @@ mod tests {
             Path::new("/lib/saves"),
             Path::new("/lib/savestates"),
             None,
+            None,
         )
         .unwrap();
         let text = std::fs::read_to_string(&cfg).unwrap();
@@ -691,10 +899,133 @@ mod tests {
             Path::new("/lib/saves"),
             Path::new("/lib/savestates"),
             Some(Path::new("/usr/lib/libretro")),
+            None,
         )
         .unwrap();
         let text = std::fs::read_to_string(&cfg).unwrap();
         assert!(text.contains("libretro_directory = \"/usr/lib/libretro\""));
+    }
+
+    #[test]
+    fn a_missing_core_is_named_before_retroarch_dies_of_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin_dir = tmp.path().join("bin");
+        plant(&bin_dir, "retroarch");
+        // A cores directory with one core in it, so it counts as one.
+        fs::write(bin_dir.join(core_file_name("snes9x")), b"x").unwrap();
+
+        let runner = Runner::new(tmp.path(), &tmp.path().join("_config"));
+        runner.set_chosen(Some(bin_dir.join("retroarch")));
+
+        assert_eq!(runner.core_installed("snes9x"), Some(true));
+        assert_eq!(runner.core_installed("mupen64plus_next"), Some(false));
+
+        let game = Game {
+            id: 1,
+            title: "Mario Kart 64".into(),
+            system: "N64".into(),
+            path: tmp.path().join("mk64.z64").display().to_string(),
+            hash: None,
+            size: None,
+            status: "added".into(),
+            core: None,
+            art: None,
+            created_at: 0,
+            updated_at: 0,
+            playtime: 0,
+            last_played: None,
+        };
+        let err = match runner.launch(&game, "mupen64plus_next") {
+            Err(e) => e,
+            Ok(_) => panic!("a missing core should not have launched"),
+        };
+        assert!(
+            matches!(err, RunnerError::CoreMissing { .. }),
+            "expected a named core, got {err}"
+        );
+        let message = err.to_string();
+        assert!(message.contains("mupen64plus_next"), "{message}");
+        assert!(message.contains("Core Downloader"), "{message}");
+
+        // And the core that is there launches.
+        let mut running = match runner.launch(&game, "snes9x") {
+            Ok(r) => r,
+            Err(e) => panic!("an installed core should launch: {e}"),
+        };
+        running.stop().ok();
+    }
+
+    #[test]
+    fn a_session_keeps_the_settings_the_person_chose() {
+        let dir = tempfile::tempdir().unwrap();
+        let theirs = dir.path().join("retroarch.cfg");
+        fs::write(
+            &theirs,
+            "# their config\n\
+             video_driver = \"vulkan\"\n\
+             input_player1_a = \"x\"\n\
+             video_fullscreen = \"false\"\n\
+             libretro_directory = \"/somewhere/else\"\n\
+             video_shader_enable = \"true\"\n",
+        )
+        .unwrap();
+
+        let cfg = dir.path().join("den-1.cfg");
+        write_config(
+            &cfg,
+            Path::new("/lib/saves"),
+            Path::new("/lib/savestates"),
+            Some(Path::new("/usr/lib/libretro")),
+            Some(&theirs),
+        )
+        .unwrap();
+        let text = fs::read_to_string(&cfg).unwrap();
+
+        // Theirs, kept.
+        assert!(text.contains("video_driver = \"vulkan\""));
+        assert!(text.contains("input_player1_a = \"x\""));
+        assert!(text.contains("video_shader_enable = \"true\""));
+        // Ours, and only once, so RetroArch cannot read the wrong one.
+        assert_eq!(text.matches("video_fullscreen =").count(), 1);
+        assert!(text.contains("video_fullscreen = \"true\""));
+        assert_eq!(text.matches("libretro_directory =").count(), 1);
+        assert!(text.contains("libretro_directory = \"/usr/lib/libretro\""));
+    }
+
+    #[test]
+    fn a_config_value_is_read_the_way_retroarch_writes_it() {
+        let text = "# comment\n\
+             libretro_directory = \"/home/you/.config/retroarch/cores\"\n\
+             video_driver = \"gl\"\n\
+             cache_directory = \"default\"\n\
+             empty_thing = \"\"\n";
+        assert_eq!(
+            config_value(text, "libretro_directory").as_deref(),
+            Some("/home/you/.config/retroarch/cores")
+        );
+        // RetroArch writes "default" and "" for a setting nobody has set;
+        // taking either literally would point Den at a directory named
+        // "default".
+        assert_eq!(config_value(text, "cache_directory"), None);
+        assert_eq!(config_value(text, "empty_thing"), None);
+        assert_eq!(config_value(text, "nothing_like_this"), None);
+    }
+
+    #[test]
+    fn config_paths_expand_the_shorthands_retroarch_uses() {
+        let retroarch = Path::new("/opt/RetroArch/retroarch");
+        assert_eq!(
+            config_path(":/cores", retroarch),
+            Some(PathBuf::from("/opt/RetroArch/cores")),
+            "a leading colon is RetroArch's own directory"
+        );
+        assert_eq!(
+            config_path("/usr/lib/libretro", retroarch),
+            Some(PathBuf::from("/usr/lib/libretro"))
+        );
+        if let Some(home) = dirs::home_dir() {
+            assert_eq!(config_path("~/cores", retroarch), Some(home.join("cores")));
+        }
     }
 
     #[test]
@@ -777,7 +1108,11 @@ mod tests {
         // back to a search the person did not ask for.
         fs::remove_file(&planted).unwrap();
         let err = runner.locate().unwrap_err();
-        assert!(matches!(err, RunnerError::ChosenNotRunnable(_)), "{err}");
+        assert!(matches!(err, RunnerError::ChosenNotRunnable(..)), "{err}");
+        assert!(
+            err.to_string().contains("is not there any more"),
+            "should say what is wrong with it: {err}"
+        );
         assert!(err.to_string().contains("retroarch"));
     }
 
@@ -925,7 +1260,7 @@ mod tests {
         let err = runner.locate().unwrap_err();
         std::env::remove_var("RETROARCH");
         assert!(
-            matches!(err, RunnerError::OverrideNotRunnable(_)),
+            matches!(err, RunnerError::OverrideNotRunnable(..)),
             "expected the override to be named, got {err}"
         );
         assert!(err.to_string().contains("not-here"));

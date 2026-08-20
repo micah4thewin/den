@@ -58,10 +58,16 @@ interface LibraryView {
   retroarch: RetroArchStatus;
 }
 
+interface CoreStatus {
+  name: string;
+  installed: boolean | null;
+}
+
 interface GameView {
   game: Game;
   saves: Save[];
   retroarch: RetroArchStatus;
+  core: CoreStatus;
 }
 
 interface Outcome {
@@ -162,8 +168,21 @@ async function renderLibrary(): Promise<void> {
 function renderRetroArchNotice(status: RetroArchStatus): void {
   const notice = $<HTMLElement>("retroarch-notice");
   notice.replaceChildren();
-  notice.hidden = status.available;
-  if (status.available) return;
+  notice.hidden = status.available && !status.chosen;
+
+  // A choice that works still has to be undoable, or picking one is a
+  // one-way door: the search never runs again, however the machine changes.
+  if (status.available) {
+    if (!status.chosen) return;
+    const row = el("div", "row");
+    row.appendChild(el("span", "quiet", `RetroArch: ${status.path}`));
+    const clear = el("button", "ghost", "Use the automatic search again");
+    clear.type = "button";
+    clear.addEventListener("click", () => void resetRetroArch());
+    row.appendChild(clear);
+    notice.appendChild(row);
+    return;
+  }
 
   notice.appendChild(
     el(
@@ -194,7 +213,13 @@ function renderRetroArchNotice(status: RetroArchStatus): void {
   if (status.searched.length > 0) {
     const details = el("details", "notice-where");
     details.appendChild(
-      el("summary", undefined, `Where Den looked (${status.searched.length} places)`),
+      el(
+        "summary",
+        undefined,
+        status.searched.length === 1
+          ? "Where Den looked"
+          : `Where Den looked (${status.searched.length} places)`,
+      ),
     );
     const list = el("ul", "extra-list mono");
     for (const place of status.searched) list.appendChild(el("li", undefined, place));
@@ -294,7 +319,8 @@ function renderGame(view: GameView): void {
   if (playIcon) play.prepend(playIcon);
   // Say it before the press, not after it. A button that looks ready and then
   // answers with an error is the interface withholding what it already knew.
-  play.disabled = !view.retroarch.available;
+  const coreMissing = view.core.installed === false;
+  play.disabled = !view.retroarch.available || coreMissing;
   play.addEventListener("click", () => {
     void (async () => {
       try {
@@ -319,6 +345,18 @@ function renderGame(view: GameView): void {
     });
     playRow.appendChild(note);
     playRow.appendChild(link);
+  } else if (coreMissing) {
+    // RetroArch is here; the core for this system is not. Said in the same
+    // place and the same voice, because to somebody holding a controller it
+    // is the same problem: this game will not start yet.
+    playRow.appendChild(
+      el(
+        "span",
+        "quiet play-note",
+        `RetroArch has no ${view.core.name} core yet. Open RetroArch, then ` +
+          `Main Menu → Online Updater → Core Downloader.`,
+      ),
+    );
   }
   meta.appendChild(playRow);
 

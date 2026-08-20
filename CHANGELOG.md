@@ -63,6 +63,39 @@ the build plan's milestones, not semver.
   and for the glue object and its sessions (`crates/den-core/tests`).
 
 ### Fixed
+- **`Fatal error received in: "init_libretro_symbols()"`.** RetroArch's way of
+  saying it could not load the core. Den passed `-L` a bare file name whenever
+  it had not found a cores directory, and its guesses at that directory never
+  asked RetroArch. Den now reads `libretro_directory` out of the person's own
+  `retroarch.cfg` — the only authority on where their cores are — and **checks
+  the core is there before launching**, so a missing core is named, with what
+  to do about it, instead of the emulator dying of it. The Game screen says so
+  before the press, and disables Play.
+- **Launching through Den discarded every RetroArch setting.** `--config`
+  replaces a configuration rather than adding to it, so a session ran with
+  none of the person's video driver, pad bindings or shaders. Den now starts
+  from their file and overrides only the handful of keys it has an opinion
+  about.
+- **The Flatpak and Snap wrappers were resolved into the multiplexer behind
+  them.** `/var/lib/flatpak/exports/bin/org.libretro.RetroArch` is a symlink to
+  `/usr/bin/flatpak`, which behaves like RetroArch only because it looks at
+  the name it was invoked under; `canonicalize` threw that name away. Den
+  spawned `flatpak` with a ROM appended, got a usage message, reported a
+  successful launch and opened a session row — the worst kind of failure,
+  the silent one. Paths are made absolute now without following symlinks.
+- **The chooser rejected `/Applications/RetroArch.app`,** which is the only
+  thing a macOS file dialog will hand back — so the one way out of "RetroArch
+  was not found" refused the only answer that platform gives. An application
+  bundle now resolves to the program inside it.
+- A chosen path that worked could never be handed back to the automatic
+  search: the way to undo it only appeared when it had already broken.
+- "is not there any more" was also the message for a file sitting right there
+  with no executable bit, which sends somebody looking in the wrong place.
+- **A build re-staged the bundled runtime from the build machine**, deleting
+  whatever `--from-archive` had put there — so the documented release flow
+  could not produce a portable bundle. The build step keeps an existing one.
+- `--from-system` would bundle `/usr/bin/flatpak` as if it were RetroArch. A
+  launcher is refused, with a pointer to `--from-archive`.
 - **A RetroArch that is installed could still go unfound, with no way to say
   where it is.** Three things now stand between that and a person who wants to
   play a game: the search covers more (Linux desktop entries, `/opt`, and the
@@ -166,7 +199,7 @@ the build plan's milestones, not semver.
   committed `__pycache__`.
 
 ### Verified
-- `cargo test --workspace` green: 74 tests across the seven crates.
+- `cargo test --workspace` green: 78 tests across the seven crates.
 - `cargo clippy --workspace --all-targets -- -D warnings` and
   `cargo fmt --all --check` clean.
 - `npm run build` (types and bundle) clean, with no unresolved assets.

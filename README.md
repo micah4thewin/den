@@ -50,7 +50,7 @@ machine and in CI without dragging platform GUI dependencies in.
 The core workspace needs nothing but a Rust toolchain:
 
 ```sh
-cargo test --workspace          # 74 tests, headless
+cargo test --workspace          # 78 tests, headless
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 ```
