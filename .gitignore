@@ -11,6 +11,11 @@ Cargo.lock
 node_modules/
 dist/
 
+# The bundled emulator, staged by tools/bundle_runtime.py. Large, somebody
+# else's to distribute, and reproducible from the script.
+apps/desktop/src-tauri/resources/runtime/*
+!apps/desktop/src-tauri/resources/runtime/README.md
+
 # Python
 __pycache__/
 *.py[cod]

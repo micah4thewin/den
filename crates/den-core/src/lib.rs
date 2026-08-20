@@ -57,11 +57,20 @@ pub struct RetroArchStatus {
     pub available: bool,
     /// The binary Den would launch, when there is one.
     pub path: Option<String>,
+    /// How it was found: `chosen`, `environment`, `bundled`, or `system`.
+    pub source: Option<String>,
+    /// Whether the path was picked by hand, and so can be given back.
+    pub chosen: bool,
     /// The reason there is not one, in a sentence.
     pub problem: Option<String>,
     /// Every place Den looked, in the order it looked.
     pub searched: Vec<String>,
+    /// Where a runtime installed for this library would go.
+    pub runtime_dir: String,
 }
+
+/// The library setting holding a RetroArch picked by hand.
+const RETROARCH_SETTING: &str = "retroarch_path";
 
 /// One launched emulator and the session row that is open for it.
 struct Live {
@@ -88,6 +97,11 @@ impl Den {
         let db = Db::open(&library.join("library.db"))?;
         let dat = load_dat(library);
         let runner = Runner::new(library, &library.join("_config"));
+        // A RetroArch picked by hand belongs to the library, so it comes back
+        // with it rather than having to be picked again every launch.
+        if let Ok(Some(chosen)) = db.setting(RETROARCH_SETTING) {
+            runner.set_chosen(Some(PathBuf::from(chosen)));
+        }
         let input = den_input::Input::new();
         Ok(Den {
             library: library.to_path_buf(),
@@ -221,20 +235,72 @@ impl Den {
             .iter()
             .map(|p| p.display().to_string())
             .collect();
+        let chosen = self.runner.chosen().is_some();
+        let runtime_dir = self.runner.managed_dir().display().to_string();
         match self.runner.locate() {
-            Ok(path) => RetroArchStatus {
+            Ok(found) => RetroArchStatus {
                 available: true,
-                path: Some(path.display().to_string()),
+                path: Some(found.path.display().to_string()),
+                source: Some(found.source.word().to_string()),
+                chosen,
                 problem: None,
                 searched,
+                runtime_dir,
             },
             Err(e) => RetroArchStatus {
                 available: false,
                 path: None,
+                source: None,
+                chosen,
                 problem: Some(e.to_string()),
                 searched,
+                runtime_dir,
             },
         }
+    }
+
+    /// Tell Den where this build's bundled runtime lives. The shell calls
+    /// this once at startup with the directory Tauri resolved for it.
+    pub fn set_runtime_dir(&self, dir: Option<PathBuf>) {
+        self.runner.set_bundled_dir(dir);
+    }
+
+    /// Point Den at a RetroArch by hand, or hand the choice back to the
+    /// search with `None`. Kept with the library, so it survives a restart.
+    ///
+    /// The path is checked before it is kept: a setting that does not work is
+    /// worse than no setting, because it also switches the search off.
+    pub fn set_retroarch_path(&self, path: Option<PathBuf>) -> Result<RetroArchStatus, Error> {
+        match path {
+            Some(path) => {
+                let path = std::fs::canonicalize(&path).unwrap_or(path);
+                self.runner.set_chosen(Some(path.clone()));
+                if let Err(e) = self.runner.locate() {
+                    // Put it back the way it was rather than leaving the
+                    // library pointed at something that cannot run.
+                    self.restore_chosen();
+                    return Err(Error::Runner(e));
+                }
+                self.db
+                    .set_setting(RETROARCH_SETTING, Some(&path.to_string_lossy()))?;
+            }
+            None => {
+                self.runner.set_chosen(None);
+                self.db.set_setting(RETROARCH_SETTING, None)?;
+            }
+        }
+        Ok(self.retroarch_status())
+    }
+
+    /// Put the runner back on whatever the library has written down.
+    fn restore_chosen(&self) {
+        let saved = self
+            .db
+            .setting(RETROARCH_SETTING)
+            .ok()
+            .flatten()
+            .map(PathBuf::from);
+        self.runner.set_chosen(saved);
     }
 }
 

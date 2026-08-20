@@ -30,6 +30,10 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
+      - name: The diagnostic runs
+        # It has to work on a machine with no RetroArch, which is exactly what
+        # a runner is; that is the case it exists to report on.
+        run: cargo run -q -p den-doctor -- "$RUNNER_TEMP/den-ci-library"
 
   frontend:
     name: Desktop frontend
@@ -82,6 +86,30 @@ jobs:
       - name: Build
         run: cargo check --all-targets
         working-directory: apps/desktop/src-tauri
+
+  runtime:
+    # The bundling script is what makes a built Den self-contained, so it is
+    # tested the same way everything else is: against stand-ins, with no
+    # network and no real RetroArch involved.
+    name: Runtime bundling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 tools/test_bundle_runtime.py
+      - name: The manifest is valid JSON with the keys the script reads
+        run: |
+          python3 - <<'EOF'
+          import json
+          m = json.load(open("tools/runtime-manifest.json"))
+          platforms = m["platforms"]
+          assert platforms, "no platforms in the manifest"
+          for key, entry in platforms.items():
+              assert set(entry) == {"url", "sha256"}, f"{key}: unexpected keys {set(entry)}"
+          print(f"{len(platforms)} platforms")
+          EOF
 
   brand:
     # The mark drawn in the interface and the mark rasterized onto the

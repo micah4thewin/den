@@ -42,8 +42,11 @@ interface SystemRow {
 interface RetroArchStatus {
   available: boolean;
   path: string | null;
+  source: string | null;
+  chosen: boolean;
   problem: string | null;
   searched: string[];
+  runtime_dir: string;
 }
 
 interface LibraryView {
@@ -171,13 +174,54 @@ function renderRetroArchNotice(status: RetroArchStatus): void {
   );
   if (status.problem) notice.appendChild(el("p", "quiet", status.problem));
 
+  // The search cannot cover every place an emulator might be. A person
+  // looking at their own filesystem can, so the way out is always offered
+  // rather than left for them to find out about.
+  const actions = el("div", "row");
+  const choose = el("button", "primary", "Choose RetroArch…");
+  choose.type = "button";
+  choose.addEventListener("click", () => void pickRetroArch());
+  actions.appendChild(choose);
+
+  if (status.chosen) {
+    const clear = el("button", "ghost", "Use the automatic search again");
+    clear.type = "button";
+    clear.addEventListener("click", () => void resetRetroArch());
+    actions.appendChild(clear);
+  }
+  notice.appendChild(actions);
+
   if (status.searched.length > 0) {
     const details = el("details", "notice-where");
-    details.appendChild(el("summary", undefined, "Where Den looked"));
+    details.appendChild(
+      el("summary", undefined, `Where Den looked (${status.searched.length} places)`),
+    );
     const list = el("ul", "extra-list mono");
     for (const place of status.searched) list.appendChild(el("li", undefined, place));
     details.appendChild(list);
     notice.appendChild(details);
+  }
+}
+
+/** Point Den at a RetroArch by hand. */
+async function pickRetroArch(): Promise<void> {
+  try {
+    const status = await invoke<RetroArchStatus>("choose_retroarch");
+    renderRetroArchNotice(status);
+    if (status.available) toast(`RetroArch: ${status.path}`);
+    await renderLibrary();
+  } catch (error) {
+    toast(String(error));
+  }
+}
+
+/** Hand the choice back to the automatic search. */
+async function resetRetroArch(): Promise<void> {
+  try {
+    renderRetroArchNotice(await invoke<RetroArchStatus>("clear_retroarch"));
+    await renderLibrary();
+  } catch (error) {
+    toast(String(error));
   }
 }
 
@@ -263,9 +307,18 @@ function renderGame(view: GameView): void {
   });
   playRow.appendChild(play);
   if (!view.retroarch.available) {
-    playRow.appendChild(
-      el("span", "quiet play-note", "RetroArch was not found — see the Library screen."),
-    );
+    const note = el("span", "quiet play-note", "RetroArch was not found. ");
+    const link = el("button", "ghost", "Choose it…");
+    link.type = "button";
+    link.addEventListener("click", () => {
+      void (async () => {
+        await pickRetroArch();
+        // Re-read the screen so the button comes back enabled.
+        await openGame(view.game.id);
+      })();
+    });
+    playRow.appendChild(note);
+    playRow.appendChild(link);
   }
   meta.appendChild(playRow);
 

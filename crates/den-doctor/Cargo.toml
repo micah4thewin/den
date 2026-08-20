@@ -1,0 +1,19 @@
+[package]
+name = "den-doctor"
+description = "Say what Den can and cannot find on this machine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "den-doctor"
+path = "src/main.rs"
+
+[dependencies]
+den-core = { path = "../den-core" }
+den-ident = { path = "../den-ident" }
+den-runner = { path = "../den-runner" }
+
+[lints]
+workspace = true

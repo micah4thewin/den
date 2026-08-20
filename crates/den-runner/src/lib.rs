@@ -5,17 +5,29 @@
 //! into the library, and watches the process so a core crash never takes the
 //! library down.
 //!
-//! Finding RetroArch is its own small job. It is not always called
+//! Finding RetroArch is its own small job, and it is done in a fixed order:
+//!
+//! 1. **Chosen** -- a path the person picked in the interface, kept with the
+//!    library. Nothing overrules somebody who pointed at the thing directly.
+//! 2. **`RETROARCH`** -- the same statement, made by the environment.
+//! 3. **Bundled** -- the copy shipped inside the application, which is what a
+//!    release build of Den contains so that nothing has to be installed.
+//! 4. **The system** -- `PATH` under every name RetroArch goes by, the places
+//!    each platform's installers use, and, on Linux, whatever the desktop
+//!    entries say, which is the one list that knows about installs nobody
+//!    predicted.
+//!
+//! The reason for the length of step 4: RetroArch is not always called
 //! `retroarch`, it is not always on `PATH`, and an application started from a
-//! dock or a launcher does not inherit the `PATH` a terminal would: on macOS
-//! that is `/usr/bin:/bin:/usr/sbin:/sbin` and nothing else, which is why a
-//! Homebrew install is invisible to a GUI app that only asks `PATH`. So Den
-//! asks `PATH` and then looks in the places the installers actually put it.
+//! dock or a launcher does not inherit the `PATH` a terminal would -- on macOS
+//! launchd hands it `/usr/bin:/bin:/usr/sbin:/sbin` and nothing else, which is
+//! why a Homebrew install is invisible to a GUI app that only asks `PATH`.
 
 use den_db::Game;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
+use std::sync::Mutex;
 
 /// Why a launch did not happen.
 #[derive(Debug, thiserror::Error)]
@@ -29,12 +41,49 @@ pub enum RunnerError {
     /// `RETROARCH` is set, and points at something that cannot be run.
     #[error("RETROARCH is set to `{0}`, which is not a program Den can run")]
     OverrideNotRunnable(String),
+    /// A path was chosen in the interface and no longer works.
+    #[error("the chosen RetroArch, `{0}`, is not there any more")]
+    ChosenNotRunnable(String),
     /// The filesystem or the spawn said no.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     /// Anything else worth a sentence.
     #[error("{0}")]
     Other(String),
+}
+
+/// How the RetroArch in hand was arrived at, so the interface can say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    /// Picked in the interface and kept with the library.
+    Chosen,
+    /// Named by the `RETROARCH` environment variable.
+    Environment,
+    /// Shipped inside this copy of Den.
+    Bundled,
+    /// Found already installed on the machine.
+    System,
+}
+
+impl Source {
+    /// The word the interface shows for this source.
+    pub fn word(self) -> &'static str {
+        match self {
+            Source::Chosen => "chosen",
+            Source::Environment => "environment",
+            Source::Bundled => "bundled",
+            Source::System => "system",
+        }
+    }
+}
+
+/// A RetroArch Den can launch, and how it was found.
+#[derive(Debug, Clone)]
+pub struct Found {
+    /// The binary itself.
+    pub path: PathBuf,
+    /// Where it came from.
+    pub source: Source,
 }
 
 /// Where RetroArch keeps session state for this library.
@@ -45,6 +94,17 @@ pub struct Runner {
     pub save_dir: PathBuf,
     /// Where RetroArch is pointed for save states.
     pub state_dir: PathBuf,
+    /// A copy of RetroArch Den keeps for itself, under the library. This is
+    /// where an unbundled build installs one rather than asking the person to.
+    managed_dir: PathBuf,
+    /// A path chosen in the interface, which outranks every search. Behind a
+    /// lock so choosing one is a `&self` operation like everything else the
+    /// shell calls through its single library handle.
+    chosen: Mutex<Option<PathBuf>>,
+    /// Where this build of Den keeps the RetroArch shipped inside it. Only
+    /// the shell knows where a bundle put its resources on this platform, so
+    /// it tells us rather than this crate guessing at bundle layouts.
+    bundled: Mutex<Option<PathBuf>>,
 }
 
 /// A launched RetroArch process, owned here.
@@ -88,7 +148,38 @@ impl Runner {
             config_dir: config_dir.to_path_buf(),
             save_dir: library.join("saves"),
             state_dir: library.join("savestates"),
+            managed_dir: library.join("_runtime"),
+            chosen: Mutex::new(None),
+            bundled: Mutex::new(None),
         }
+    }
+
+    /// Point this runner at a RetroArch somebody picked by hand.
+    pub fn set_chosen(&self, path: Option<PathBuf>) {
+        if let Ok(mut chosen) = self.chosen.lock() {
+            *chosen = path;
+        }
+    }
+
+    /// The RetroArch chosen by hand, if there is one.
+    pub fn chosen(&self) -> Option<PathBuf> {
+        self.chosen.lock().ok().and_then(|c| c.clone())
+    }
+
+    /// Where Den keeps a RetroArch of its own for this library.
+    pub fn managed_dir(&self) -> &Path {
+        &self.managed_dir
+    }
+
+    /// Tell the runner where this build's bundled runtime was installed.
+    pub fn set_bundled_dir(&self, dir: Option<PathBuf>) {
+        if let Ok(mut bundled) = self.bundled.lock() {
+            *bundled = dir;
+        }
+    }
+
+    fn bundled_dir(&self) -> Option<PathBuf> {
+        self.bundled.lock().ok().and_then(|b| b.clone())
     }
 
     /// Find RetroArch, now rather than at startup.
@@ -96,14 +187,43 @@ impl Runner {
     /// Resolved on every call on purpose: somebody who hits "RetroArch was not
     /// found", installs it, and comes back should be able to press Play, not
     /// have to restart Den first.
-    pub fn locate(&self) -> Result<PathBuf, RunnerError> {
+    pub fn locate(&self) -> Result<Found, RunnerError> {
+        // A statement beats a search, and a broken statement is reported
+        // rather than quietly worked around: somebody who pointed Den at a
+        // path wants to know that path stopped working.
+        if let Some(chosen) = self.chosen() {
+            return runnable(&chosen)
+                .map(|path| Found {
+                    path,
+                    source: Source::Chosen,
+                })
+                .ok_or_else(|| RunnerError::ChosenNotRunnable(chosen.display().to_string()));
+        }
         if let Some(raw) = explicit_override() {
             return runnable(&raw)
+                .map(|path| Found {
+                    path,
+                    source: Source::Environment,
+                })
                 .ok_or_else(|| RunnerError::OverrideNotRunnable(raw.display().to_string()));
+        }
+        for dir in runtime_dirs(self.bundled_dir(), &self.managed_dir) {
+            for name in binary_names() {
+                if let Some(path) = runnable(&dir.join(name)) {
+                    return Ok(Found {
+                        path,
+                        source: Source::Bundled,
+                    });
+                }
+            }
         }
         candidates()
             .iter()
             .find_map(|c| runnable(c))
+            .map(|path| Found {
+                path,
+                source: Source::System,
+            })
             .ok_or(RunnerError::NotFound)
     }
 
@@ -116,15 +236,29 @@ impl Runner {
     /// has to tell somebody Den came up empty, because "not found" without
     /// "here is where I looked" is not something anybody can act on.
     pub fn searched(&self) -> Vec<PathBuf> {
-        match explicit_override() {
-            Some(raw) => vec![raw],
-            None => candidates(),
+        if let Some(chosen) = self.chosen() {
+            return vec![chosen];
         }
+        if let Some(raw) = explicit_override() {
+            return vec![raw];
+        }
+        let mut out: Vec<PathBuf> = runtime_dirs(self.bundled_dir(), &self.managed_dir)
+            .into_iter()
+            .flat_map(|dir| binary_names().iter().map(move |n| dir.join(n)))
+            .collect();
+        out.extend(candidates());
+        out
+    }
+
+    /// The directory of libretro cores that goes with a given RetroArch, if
+    /// one can be found.
+    pub fn cores_for(&self, retroarch: &Path) -> Option<PathBuf> {
+        core_dir(retroarch)
     }
 
     /// Launch a game with a libretro core, fullscreen, private config.
     pub fn launch(&self, game: &Game, core: &str) -> Result<Running, RunnerError> {
-        let retroarch = self.locate()?;
+        let retroarch = self.locate()?.path;
         fs::create_dir_all(&self.config_dir)?;
         fs::create_dir_all(&self.save_dir)?;
         fs::create_dir_all(&self.state_dir)?;
@@ -149,7 +283,7 @@ impl Runner {
 }
 
 /// The file name of a libretro core on this platform.
-fn core_file_name(core: &str) -> String {
+pub fn core_file_name(core: &str) -> String {
     let ext = if cfg!(target_os = "windows") {
         "dll"
     } else if cfg!(target_os = "macos") {
@@ -217,6 +351,11 @@ fn explicit_override() -> Option<PathBuf> {
         return None;
     }
     Some(PathBuf::from(raw))
+}
+
+/// Whether `path` is a file this process could execute.
+pub fn is_runnable(path: &Path) -> bool {
+    runnable(path).is_some()
 }
 
 /// `path` as an absolute path, if it is a file this process could execute.
@@ -311,10 +450,152 @@ fn candidates() -> Vec<PathBuf> {
             ".local/share/flatpak/exports/bin/org.libretro.RetroArch",
         ));
         out.extend(under(&home, ".local/bin/retroarch"));
+        out.push(PathBuf::from("/opt/retroarch/retroarch"));
+        out.push(PathBuf::from("/opt/RetroArch/retroarch"));
     }
 
-    out.dedup();
+    // Last, because it is the widest net and the slowest: anything the
+    // desktop entries point at.
+    out.extend(from_desktop_entries());
+
+    dedup_keeping_order(&mut out);
     out
+}
+
+/// The directories that may hold a RetroArch shipped with Den, or one Den
+/// installed for itself.
+///
+/// The shell passes the bundled directory in, because only it can ask Tauri
+/// where this platform's bundle put its resources; keeping that knowledge out
+/// of here is what lets this crate stay headless. `DEN_RUNTIME_DIR` does the
+/// same job for anything without a shell -- `den-doctor`, a test, a script.
+fn runtime_dirs(bundled: Option<PathBuf>, managed: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    // The shell hands us the resource directory. Where inside it a bundler
+    // put a resource depends on the bundler and the platform, so rather than
+    // betting on one layout we look at the two it can be, plus the directory
+    // itself for a staged tree that was copied in whole.
+    if let Some(dir) = bundled {
+        for base in [dir.join("runtime"), dir.join("resources/runtime"), dir] {
+            out.push(base.join("retroarch"));
+            out.push(base);
+        }
+    }
+    if let Some(dir) = std::env::var_os("DEN_RUNTIME_DIR") {
+        let dir = PathBuf::from(dir);
+        out.push(dir.join("retroarch"));
+        out.push(dir);
+    }
+    // Beside the executable, which covers a portable build and a dev run.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            out.push(dir.join("runtime/retroarch"));
+            out.push(dir.join("runtime"));
+            // macOS: Den.app/Contents/MacOS/den -> Contents/Resources
+            if let Some(contents) = dir.parent() {
+                out.push(contents.join("Resources/runtime/retroarch"));
+                out.push(contents.join("Resources/runtime"));
+            }
+        }
+    }
+    out.push(managed.join("retroarch"));
+    out.push(managed.to_path_buf());
+    out.retain(|d| !d.as_os_str().is_empty());
+    dedup_keeping_order(&mut out);
+    out
+}
+
+/// Every RetroArch a desktop entry knows about.
+///
+/// This is the list that catches an install nobody predicted -- a package from
+/// a third-party repository, an AppImage someone registered, a build in
+/// `/opt`. If it can be started from the applications menu, its `Exec=` line
+/// says where it is.
+#[cfg(target_os = "linux")]
+fn from_desktop_entries() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = vec![
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
+        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+        PathBuf::from("/var/lib/snapd/desktop/applications"),
+    ];
+    if let Some(home) = dirs::home_dir() {
+        dirs.push(home.join(".local/share/applications"));
+        dirs.push(home.join(".local/share/flatpak/exports/share/applications"));
+    }
+
+    let mut out = Vec::new();
+    for dir in dirs {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            if !name.to_ascii_lowercase().contains("retroarch") || !name.ends_with(".desktop") {
+                continue;
+            }
+            let Ok(text) = fs::read_to_string(&path) else {
+                continue;
+            };
+            out.extend(exec_paths(&text));
+        }
+    }
+    out
+}
+
+#[cfg(not(target_os = "linux"))]
+fn from_desktop_entries() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+/// The program named by each `Exec=` line in a desktop entry.
+///
+/// `Exec` carries arguments and `%`-codes after the program; only the first
+/// token is a path, and it is only useful to us if it is an absolute one --
+/// a bare `retroarch` here tells us nothing `PATH` did not already.
+///
+/// The program must also *be* RetroArch rather than something that knows how
+/// to start it. A Flatpak entry reads `Exec=/usr/bin/flatpak run
+/// org.libretro.RetroArch`, and the first token there is `flatpak`: running
+/// that on its own, with the arguments Den appends instead of its own, gets
+/// you flatpak's usage message and no emulator. The exported wrapper under
+/// `/var/lib/flatpak/exports/bin` is the one that behaves like RetroArch, and
+/// the candidate list already names it directly.
+fn exec_paths(desktop_entry: &str) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for line in desktop_entry.lines() {
+        let line = line.trim();
+        let Some(value) = line.strip_prefix("Exec=") else {
+            continue;
+        };
+        let program = match value.trim().strip_prefix('"') {
+            // A quoted program may contain spaces.
+            Some(rest) => rest.split('"').next().unwrap_or_default(),
+            None => value.split_whitespace().next().unwrap_or_default(),
+        };
+        let program = PathBuf::from(program);
+        if program.is_absolute() && names_retroarch(&program) {
+            out.push(program);
+        }
+    }
+    out
+}
+
+/// Whether a path's own file name says it is RetroArch.
+fn names_retroarch(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.to_ascii_lowercase().contains("retroarch"))
+        .unwrap_or(false)
+}
+
+/// Drop repeats while keeping the order, which is the whole point of the
+/// list: `Vec::dedup` only removes neighbours, and sorting would throw the
+/// priority away.
+fn dedup_keeping_order(paths: &mut Vec<PathBuf>) {
+    let mut seen = std::collections::HashSet::new();
+    paths.retain(|p| seen.insert(p.clone()));
 }
 
 /// `home/suffix`, when there is a home directory to hang it on.
@@ -405,6 +686,134 @@ mod tests {
         );
     }
 
+    /// A stand-in RetroArch: a real, executable file.
+    fn plant(dir: &Path, name: &str) -> PathBuf {
+        fs::create_dir_all(dir).unwrap();
+        let path = dir.join(name);
+        fs::write(&path, b"#!/bin/sh\nexit 0\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn a_chosen_path_beats_every_search() {
+        let tmp = tempfile::tempdir().unwrap();
+        let planted = plant(&tmp.path().join("somewhere/odd"), "retroarch");
+        let runner = Runner::new(tmp.path(), &tmp.path().join("_config"));
+
+        runner.set_chosen(Some(planted.clone()));
+        let found = runner.locate().expect("the chosen path is used");
+        assert_eq!(found.source, Source::Chosen);
+        assert_eq!(found.path, fs::canonicalize(&planted).unwrap());
+        assert_eq!(runner.searched(), vec![planted.clone()]);
+
+        // And when it stops working, it says so by name rather than falling
+        // back to a search the person did not ask for.
+        fs::remove_file(&planted).unwrap();
+        let err = runner.locate().unwrap_err();
+        assert!(matches!(err, RunnerError::ChosenNotRunnable(_)), "{err}");
+        assert!(err.to_string().contains("retroarch"));
+    }
+
+    #[test]
+    fn a_bundled_runtime_is_found_under_either_layout() {
+        // Which of these a bundler produces depends on the bundler and the
+        // platform, and this crate cannot ask; it looks at both.
+        for layout in ["runtime", "resources/runtime"] {
+            let tmp = tempfile::tempdir().unwrap();
+            let resources = tmp.path().join("Resources");
+            let planted = plant(&resources.join(layout).join("retroarch"), "retroarch");
+            let runner = Runner::new(tmp.path(), &tmp.path().join("_config"));
+            runner.set_bundled_dir(Some(resources.clone()));
+            let found = runner
+                .locate()
+                .unwrap_or_else(|e| panic!("layout {layout}: {e}"));
+            assert_eq!(found.source, Source::Bundled);
+            assert_eq!(found.path, fs::canonicalize(&planted).unwrap());
+        }
+    }
+
+    #[test]
+    fn a_bundled_runtime_beats_one_installed_on_the_machine() {
+        let tmp = tempfile::tempdir().unwrap();
+        let resources = tmp.path().join("Resources");
+        let bundled = plant(&resources.join("runtime/retroarch"), "retroarch");
+        let runner = Runner::new(tmp.path(), &tmp.path().join("_config"));
+        runner.set_bundled_dir(Some(resources));
+        let found = runner.locate().unwrap();
+        assert_eq!(
+            found.path,
+            fs::canonicalize(&bundled).unwrap(),
+            "a build that ships its own RetroArch should use it"
+        );
+    }
+
+    #[test]
+    fn a_runtime_under_the_library_is_found_without_anything_installed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = tmp.path().join("den");
+        let runner = Runner::new(&library, &library.join("_config"));
+        assert_eq!(runner.managed_dir(), library.join("_runtime"));
+
+        let planted = plant(&library.join("_runtime/retroarch"), "retroarch");
+        let found = runner.locate().expect("the managed copy is found");
+        assert_eq!(found.source, Source::Bundled);
+        assert_eq!(found.path, fs::canonicalize(&planted).unwrap());
+    }
+
+    #[test]
+    fn exec_lines_yield_retroarch_programs_only() {
+        let entry = "[Desktop Entry]\n\
+             Name=RetroArch\n\
+             Exec=/usr/local/bin/retroarch %f\n\
+             Exec=retroarch\n\
+             Exec=\"/opt/My Emulators/retroarch\" --fullscreen %U\n\
+             Exec=/usr/bin/flatpak run --branch=stable org.libretro.RetroArch\n\
+             Exec=/usr/bin/env RETROARCH=1 /usr/bin/retroarch\n";
+        assert_eq!(
+            exec_paths(entry),
+            vec![
+                // Absolute and named for what it is.
+                PathBuf::from("/usr/local/bin/retroarch"),
+                PathBuf::from("/opt/My Emulators/retroarch"),
+            ],
+            "a launcher that knows how to start RetroArch is not RetroArch: \
+             running `flatpak` or `env` with Den's arguments appended gets a \
+             usage message and no emulator"
+        );
+    }
+
+    #[test]
+    fn the_search_list_has_no_repeats() {
+        let mut paths = vec![
+            PathBuf::from("/a"),
+            PathBuf::from("/b"),
+            PathBuf::from("/a"),
+            PathBuf::from("/c"),
+            PathBuf::from("/b"),
+        ];
+        dedup_keeping_order(&mut paths);
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/a"),
+                PathBuf::from("/b"),
+                PathBuf::from("/c")
+            ],
+            "order is the priority, so it has to survive deduplication"
+        );
+
+        // And the real list, which is built from overlapping sources.
+        let places = candidates();
+        let mut unique = places.clone();
+        dedup_keeping_order(&mut unique);
+        assert_eq!(places.len(), unique.len(), "the search list repeats itself");
+    }
+
     #[test]
     fn the_search_looks_beyond_path() {
         let places = candidates();
@@ -441,8 +850,12 @@ mod tests {
         let found = runner.locate();
         std::env::remove_var("RETROARCH");
         let found = found.expect("an explicit override is found");
-        assert!(found.is_absolute(), "{found:?} should have been resolved");
-        assert!(found.is_file());
+        assert_eq!(found.source, Source::Environment);
+        assert!(
+            found.path.is_absolute(),
+            "{found:?} should have been resolved"
+        );
+        assert!(found.path.is_file());
 
         // An override that points nowhere says so, rather than quietly
         // falling back to a PATH lookup the person did not ask for.

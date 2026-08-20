@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "Where tools/bundle_runtime.py --from-manifest downloads a RetroArch from.",
+    "",
+    "The URLs below are libretro's published build locations. They are NOT",
+    "pinned to a hash yet, and they were not verified from the environment this",
+    "file was written in, which cannot reach that host. Run",
+    "",
+    "    python3 tools/bundle_runtime.py --from-manifest --record",
+    "",
+    "once on a machine with network: it downloads, prints the sha256, writes it",
+    "here, and every later run verifies against it. Until a sha256 is recorded",
+    "the script refuses to stage a download, so an unpinned entry can never be",
+    "silently trusted.",
+    "",
+    "--from-archive is the surer route for a release: download a build yourself,",
+    "check it, and hand the file to the script."
+  ],
+  "platforms": {
+    "linux-x86_64": {
+      "url": "https://buildbot.libretro.com/nightly/linux/x86_64/RetroArch.7z",
+      "sha256": null
+    },
+    "win32-x86_64": {
+      "url": "https://buildbot.libretro.com/nightly/windows/x86_64/RetroArch.7z",
+      "sha256": null
+    },
+    "darwin-x86_64": {
+      "url": null,
+      "sha256": null
+    },
+    "darwin-aarch64": {
+      "url": null,
+      "sha256": null
+    }
+  }
+}

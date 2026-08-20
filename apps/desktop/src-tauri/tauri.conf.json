@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run build && npm run bundle:runtime"
   },
   "app": {
     "withGlobalTauri": false,
@@ -26,7 +26,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "appimage", "nsis", "msi"],
+    "targets": [
+      "deb",
+      "appimage",
+      "nsis",
+      "msi"
+    ],
     "category": "Game",
     "shortDescription": "A quiet place to play the games you already own",
     "longDescription": "Den is a local-first launcher that sorts, repairs, and shelves your game files, boots them through RetroArch, and resumes where you left off.",
@@ -42,6 +47,9 @@
       "nsis": {
         "installMode": "perMachine"
       }
+    },
+    "resources": {
+      "resources/runtime": "runtime"
     }
   }
 }

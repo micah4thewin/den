@@ -123,6 +123,33 @@ pub(crate) fn open_library_folder(state: State<'_, AppState>) -> CommandResult<(
     })
 }
 
+/// Let somebody point Den at a RetroArch by hand.
+///
+/// The last resort that always works: no search can cover every place an
+/// emulator might be, but a person looking at their own filesystem can.
+#[tauri::command]
+pub(crate) fn choose_retroarch(state: State<'_, AppState>) -> CommandResult<RetroArchStatus> {
+    let picked = rfd::FileDialog::new()
+        .set_title("Choose the RetroArch program")
+        .pick_file();
+    let Some(picked) = picked else {
+        // Cancelling is not a failure; report where things stand.
+        return with_den(&state, |den| Ok(den.retroarch_status()));
+    };
+    with_den(&state, |den| {
+        den.set_retroarch_path(Some(picked.clone()))
+            .map_err(|e| e.to_string())
+    })
+}
+
+/// Hand the choice back to the automatic search.
+#[tauri::command]
+pub(crate) fn clear_retroarch(state: State<'_, AppState>) -> CommandResult<RetroArchStatus> {
+    with_den(&state, |den| {
+        den.set_retroarch_path(None).map_err(|e| e.to_string())
+    })
+}
+
 /// Open a directory in the platform's file manager.
 fn open_in_file_manager(path: &str) -> CommandResult<()> {
     #[cfg(target_os = "macos")]

@@ -164,6 +164,11 @@ impl Db {
                 created_at INTEGER NOT NULL,
                 json       TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS settings (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_games_system ON games(system);
             CREATE INDEX IF NOT EXISTS idx_games_title  ON games(title);
             CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started);",
@@ -418,6 +423,34 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
+    /// Read a setting, if it has ever been written.
+    pub fn setting(&self, key: &str) -> rusqlite::Result<Option<String>> {
+        self.conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
+    /// Write a setting, or clear it with `None`. A setting is something the
+    /// person chose about *this* library, so it belongs beside the library
+    /// rather than in a config file somewhere else on the machine.
+    pub fn set_setting(&self, key: &str, value: Option<&str>) -> rusqlite::Result<()> {
+        match value {
+            Some(value) => self.conn.execute(
+                "INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = ?3",
+                params![key, value, now()],
+            )?,
+            None => self
+                .conn
+                .execute("DELETE FROM settings WHERE key = ?1", params![key])?,
+        };
+        Ok(())
+    }
+
     /// The library's total game count.
     pub fn game_count(&self) -> rusqlite::Result<i64> {
         self.conn
@@ -622,6 +655,27 @@ mod tests {
         // A bare wildcard is a search for that character, not for everything.
         assert_eq!(db.list_games("%", None).unwrap().len(), 1);
         assert_eq!(db.list_games("_", None).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn settings_round_trip_and_clear() {
+        let db = db();
+        assert_eq!(db.setting("retroarch_path").unwrap(), None);
+        db.set_setting("retroarch_path", Some("/opt/retroarch/retroarch"))
+            .unwrap();
+        assert_eq!(
+            db.setting("retroarch_path").unwrap().as_deref(),
+            Some("/opt/retroarch/retroarch")
+        );
+        // Writing again replaces rather than failing on the primary key.
+        db.set_setting("retroarch_path", Some("/usr/bin/retroarch"))
+            .unwrap();
+        assert_eq!(
+            db.setting("retroarch_path").unwrap().as_deref(),
+            Some("/usr/bin/retroarch")
+        );
+        db.set_setting("retroarch_path", None).unwrap();
+        assert_eq!(db.setting("retroarch_path").unwrap(), None);
     }
 
     #[test]

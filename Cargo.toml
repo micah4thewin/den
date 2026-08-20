@@ -11,6 +11,7 @@ members = [
   "crates/den-runner",
   "crates/den-input",
   "crates/den-core",
+  "crates/den-doctor",
 ]
 
 [workspace.package]

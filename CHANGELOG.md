@@ -27,6 +27,25 @@ the build plan's milestones, not semver.
 - `apps/desktop/` — Tauri v2 shell scaffold: design-system port (tokens, base,
   animations, six Gilroy/Avenir faces, `createElementNS` icon table, brand
   mark), and the four screens (Library, Game, Intake, Controllers) in HTML/CSS.
+- **A RetroArch can be bundled inside Den.** `tools/bundle_runtime.py` stages
+  one into `apps/desktop/src-tauri/resources/runtime/`, which the Tauri bundle
+  ships and the shell hands to the runner as the first place it looks. Three
+  sources: an archive you downloaded (an AppImage, `.zip`, `.tar.*`, `.7z`, or
+  a directory), the RetroArch installed on this machine, or a download pinned
+  by SHA-256 in `tools/runtime-manifest.json`. `npm run tauri build` stages one
+  automatically and still succeeds when there is nothing to stage, so a build
+  never depends on it. The script prints the licence of everything it stages,
+  because bundling turns other people's licence terms into yours: RetroArch is
+  GPLv3, and `snes9x`, `genesis_plus_gx` and `fbneo` carry non-commercial
+  terms.
+- **`den-doctor`** — a headless diagnostic. Every path Den tried, what was
+  actually at each one, which answer it settled on, which cores are installed,
+  which controllers are attached. It builds without a WebView, so it runs on a
+  machine that cannot build the app.
+- **A RetroArch picked by hand is kept with the library**, in a new `settings`
+  table. It is checked before it is stored — a setting that does not work is
+  worse than none, because it also switches the search off — and the interface
+  offers the automatic search back when the chosen one stops working.
 - **Play sessions are recorded.** A launch opens a row in `sessions` and
   closes it when the emulator exits, which is what fills the library's
   Continue row, its Recent shelf, and a game's playtime. `Den::reap` closes
@@ -44,6 +63,22 @@ the build plan's milestones, not semver.
   and for the glue object and its sessions (`crates/den-core/tests`).
 
 ### Fixed
+- **A RetroArch that is installed could still go unfound, with no way to say
+  where it is.** Three things now stand between that and a person who wants to
+  play a game: the search covers more (Linux desktop entries, `/opt`, and the
+  places the last round missed); **Choose RetroArch…** on the Library screen
+  points Den at any binary and keeps the choice with the library; and
+  `den-doctor` prints every path tried and what was at each one, so a report
+  of "it still cannot find it" has an answer in it.
+- A Flatpak desktop entry reads `Exec=/usr/bin/flatpak run
+  org.libretro.RetroArch`, and taking the first token of that would have had
+  Den launch `flatpak` itself with a ROM appended — a usage message and no
+  emulator. Only a program whose own name says RetroArch is taken from a
+  desktop entry; the Flatpak wrapper is already in the list under its own
+  path.
+- The search list deduplicated with `Vec::dedup`, which only removes
+  neighbours, so overlapping sources left repeats in it. Order is the priority
+  here, so it is deduplicated without sorting.
 - **RetroArch was only ever looked for as `retroarch` on `PATH`,** resolved
   once at startup. That misses the macOS app bundle (never on `PATH`),
   `retroarch.exe` on Windows (so Den could not launch anything there at all),
@@ -126,7 +161,7 @@ the build plan's milestones, not semver.
   committed `__pycache__`.
 
 ### Verified
-- `cargo test --workspace` green: 65 tests across the six crates.
+- `cargo test --workspace` green: 72 tests across the seven crates.
 - `cargo clippy --workspace --all-targets -- -D warnings` and
   `cargo fmt --all --check` clean.
 - `npm run build` (types and bundle) clean, with no unresolved assets.
@@ -134,10 +169,18 @@ the build plan's milestones, not semver.
 - All four screens rendered and driven in a real browser, light and dark.
 
 ### Known gaps
-- RetroArch is not installed on this machine; launch reports it gracefully,
-  and the interface says where it looked.
+- The URLs in `tools/runtime-manifest.json` were written without being reached:
+  the environment this was built in cannot resolve that host. They are not
+  pinned to a hash, and `--from-manifest` refuses to stage anything unpinned,
+  so an unverified URL cannot be silently trusted. One
+  `--from-manifest --record` run on a networked machine pins them.
+  `--from-archive` and `--from-system` need no network and are tested.
 - Cores are not installed for you. Den points RetroArch at the right core for
-  a system, but RetroArch has to have downloaded it.
+  a system; RetroArch downloads cores itself, and `--from-system` copies the
+  ones already installed.
+- A bundled `--from-system` RetroArch is linked against the libraries of the
+  machine that built it. For a bundle to hand to somebody else, stage one of
+  libretro's portable builds with `--from-archive`.
 - `den-input` reads evdev names directly; gilrs + SDL gamecontrollerdb is the
   planned upgrade.
 - The intake screen has no password field, so an encrypted archive is
