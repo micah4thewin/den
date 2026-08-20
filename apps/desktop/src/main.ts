@@ -61,6 +61,7 @@ interface LibraryView {
 interface CoreStatus {
   name: string;
   installed: boolean | null;
+  unsupported: string | null;
 }
 
 interface GameView {
@@ -165,8 +166,16 @@ async function renderLibrary(): Promise<void> {
 }
 
 /** A sentence under the Library heading when there is nothing to play with. */
+/** Whether the "Where Den looked" list was left open. */
+let whereOpen = false;
+
 function renderRetroArchNotice(status: RetroArchStatus): void {
   const notice = $<HTMLElement>("retroarch-notice");
+  // A re-render replaces every node, which drops focus to <body> and folds
+  // the disclosure shut under whoever was reading it. Both are put back.
+  const hadFocus = notice.contains(document.activeElement)
+    ? (document.activeElement as HTMLElement).textContent
+    : null;
   notice.replaceChildren();
   notice.hidden = status.available && !status.chosen;
 
@@ -211,7 +220,11 @@ function renderRetroArchNotice(status: RetroArchStatus): void {
   notice.appendChild(actions);
 
   if (status.searched.length > 0) {
-    const details = el("details", "notice-where");
+    const details = el("details", "notice-where") as HTMLDetailsElement;
+    details.open = whereOpen;
+    details.addEventListener("toggle", () => {
+      whereOpen = details.open;
+    });
     details.appendChild(
       el(
         "summary",
@@ -226,14 +239,28 @@ function renderRetroArchNotice(status: RetroArchStatus): void {
     details.appendChild(list);
     notice.appendChild(details);
   }
+
+  restoreFocus(notice, hadFocus);
+}
+
+/** Put focus back on the control with the same label, after a re-render. */
+function restoreFocus(within: HTMLElement, label: string | null): void {
+  if (!label) return;
+  for (const node of within.querySelectorAll<HTMLElement>("button, summary")) {
+    if (node.textContent === label) {
+      node.focus();
+      return;
+    }
+  }
 }
 
 /** Point Den at a RetroArch by hand. */
 async function pickRetroArch(): Promise<void> {
   try {
     const status = await invoke<RetroArchStatus>("choose_retroarch");
-    renderRetroArchNotice(status);
     if (status.available) toast(`RetroArch: ${status.path}`);
+    // renderLibrary draws the notice from the same answer, so drawing it
+    // here as well would only make the live region speak twice.
     await renderLibrary();
   } catch (error) {
     toast(String(error));
@@ -243,7 +270,7 @@ async function pickRetroArch(): Promise<void> {
 /** Hand the choice back to the automatic search. */
 async function resetRetroArch(): Promise<void> {
   try {
-    renderRetroArchNotice(await invoke<RetroArchStatus>("clear_retroarch"));
+    await invoke<RetroArchStatus>("clear_retroarch");
     await renderLibrary();
   } catch (error) {
     toast(String(error));
@@ -302,6 +329,31 @@ async function openGame(id: number): Promise<void> {
   }
 }
 
+/** Why Play will not start this game, or null when it will. */
+function playBlockedBecause(
+  view: GameView,
+): { reason: string; choose: boolean } | null {
+  if (view.core.unsupported) {
+    return { reason: view.core.unsupported, choose: false };
+  }
+  if (!view.retroarch.available) {
+    return { reason: "RetroArch was not found.", choose: true };
+  }
+  if (view.core.installed === false) {
+    // RetroArch is here; the core for this system is not. Said in the same
+    // place and the same voice, because to somebody holding a controller it
+    // is the same problem: this game will not start yet.
+    const named = view.core.name || "the";
+    return {
+      reason:
+        `RetroArch has no ${named} core yet. Open RetroArch, then ` +
+        `Main Menu → Online Updater → Core Downloader.`,
+      choose: false,
+    };
+  }
+  return null;
+}
+
 function renderGame(view: GameView): void {
   const layout = $<HTMLElement>("game-layout");
   layout.replaceChildren();
@@ -319,8 +371,10 @@ function renderGame(view: GameView): void {
   if (playIcon) play.prepend(playIcon);
   // Say it before the press, not after it. A button that looks ready and then
   // answers with an error is the interface withholding what it already knew.
-  const coreMissing = view.core.installed === false;
-  play.disabled = !view.retroarch.available || coreMissing;
+  // One reason, in one place, so the button and the sentence beside it can
+  // never disagree about why it will not start.
+  const blocked = playBlockedBecause(view);
+  play.disabled = blocked !== null;
   play.addEventListener("click", () => {
     void (async () => {
       try {
@@ -332,31 +386,25 @@ function renderGame(view: GameView): void {
     })();
   });
   playRow.appendChild(play);
-  if (!view.retroarch.available) {
-    const note = el("span", "quiet play-note", "RetroArch was not found. ");
-    const link = el("button", "ghost", "Choose it…");
-    link.type = "button";
-    link.addEventListener("click", () => {
-      void (async () => {
-        await pickRetroArch();
-        // Re-read the screen so the button comes back enabled.
-        await openGame(view.game.id);
-      })();
-    });
+  if (blocked) {
+    // The reason is tied to the button, not merely placed near it, so a
+    // screen reader announces why it is disabled rather than just that it is.
+    const note = el("span", "quiet play-note", blocked.reason);
+    note.id = `play-reason-${view.game.id}`;
+    play.setAttribute("aria-describedby", note.id);
     playRow.appendChild(note);
-    playRow.appendChild(link);
-  } else if (coreMissing) {
-    // RetroArch is here; the core for this system is not. Said in the same
-    // place and the same voice, because to somebody holding a controller it
-    // is the same problem: this game will not start yet.
-    playRow.appendChild(
-      el(
-        "span",
-        "quiet play-note",
-        `RetroArch has no ${view.core.name} core yet. Open RetroArch, then ` +
-          `Main Menu → Online Updater → Core Downloader.`,
-      ),
-    );
+    if (blocked.choose) {
+      const link = el("button", "ghost", "Choose RetroArch…");
+      link.type = "button";
+      link.addEventListener("click", () => {
+        void (async () => {
+          await pickRetroArch();
+          // Re-read the screen so the button comes back enabled.
+          await openGame(view.game.id);
+        })();
+      });
+      playRow.appendChild(link);
+    }
   }
   meta.appendChild(playRow);
 

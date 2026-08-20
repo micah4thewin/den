@@ -47,6 +47,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -164,7 +165,12 @@ def find_core_dir(retroarch):
         "/usr/local/lib/libretro",
         "/usr/lib/x86_64-linux-gnu/libretro",
     ]:
-        if os.path.isdir(candidate):
+        # It has to hold a core, not merely exist: a fresh install leaves an
+        # empty ~/.config/retroarch/cores that would shadow the real one.
+        if os.path.isdir(candidate) and any(
+            name.endswith(CORE_EXT) and "_libretro" in name
+            for name in os.listdir(candidate)
+        ):
             return candidate
     return None
 
@@ -190,10 +196,28 @@ def extract(archive, into):
     if lower.endswith(".zip"):
         with zipfile.ZipFile(archive) as zf:
             zf.extractall(into)
+            # ZipFile.extractall drops the mode bits, so an executable that
+            # went in as one comes out as a plain file.
+            for member in zf.infolist():
+                mode = member.external_attr >> 16
+                if mode & 0o111:
+                    target = os.path.join(into, member.filename)
+                    if os.path.isfile(target):
+                        os.chmod(target, os.stat(target).st_mode | 0o755)
         return
     if any(lower.endswith(s) for s in (".tar", ".tar.gz", ".tgz", ".tar.xz", ".tar.bz2")):
         with tarfile.open(archive) as tf:
-            tf.extractall(into)
+            # `data` refuses members that escape the destination, absolute
+            # paths, links out of the tree, and setuid bits. Without it,
+            # Python 3.11 trusts the archive completely -- and Python 3.14
+            # changes the default under us.
+            try:
+                tf.extractall(into, filter="data")
+            except TypeError:  # Python < 3.11.4 has no filter argument
+                for member in tf.getmembers():
+                    if member.name.startswith(("/", "..")) or ".." in member.name.split("/"):
+                        raise SystemExit(f"{archive} contains an unsafe path: {member.name}")
+                tf.extractall(into)
         return
     if lower.endswith(".7z"):
         for tool in ("7zz", "7z", "7za"):
@@ -208,17 +232,38 @@ def extract(archive, into):
     raise SystemExit(f"don't know how to unpack {archive}")
 
 
-def flatten(into):
-    """Lift a single wrapper directory, so the binary is where we expect."""
-    entries = [e for e in os.listdir(into) if not e.startswith(".")]
-    if len(entries) != 1:
+def promote(into):
+    """Lift the binary and everything beside it to the top of `into`.
+
+    den-runner looks for `<dir>/retroarch` and `<dir>/retroarch/retroarch` and
+    stops; it does not go hunting. Almost every published build unpacks into a
+    wrapper directory (`RetroArch-Linux-x86_64/`), and a zip made on macOS
+    adds `__MACOSX/` beside it, so "lift it only if it is the single entry"
+    fails on the normal case -- and worse, fails quietly, leaving a staged
+    tree that looks right to this script and is invisible to Den.
+
+    Whatever directory the binary is in, its contents come up to the top: the
+    libraries and cores that sit beside it have to travel with it.
+    """
+    binary = find_binary(into)
+    if not binary:
         return
-    only = os.path.join(into, entries[0])
-    if not os.path.isdir(only):
-        return
-    for name in os.listdir(only):
-        shutil.move(os.path.join(only, name), os.path.join(into, name))
-    os.rmdir(only)
+    home = os.path.dirname(binary)
+    if os.path.abspath(home) != os.path.abspath(into):
+        for name in os.listdir(home):
+            source = os.path.join(home, name)
+            target = os.path.join(into, name)
+            if os.path.exists(target):
+                shutil.rmtree(target) if os.path.isdir(target) else os.remove(target)
+            shutil.move(source, target)
+    # Sweep up what the wrapper left: its own now-empty directory, and the
+    # __MACOSX sidecar any zip built on macOS carries.
+    for name in list(os.listdir(into)):
+        path = os.path.join(into, name)
+        if not os.path.isdir(path):
+            continue
+        if name == "__MACOSX" or not os.listdir(path):
+            shutil.rmtree(path, ignore_errors=True)
 
 
 def find_binary(root):
@@ -240,6 +285,16 @@ def stage_from_system(dest, want_cores):
             "No RetroArch found on this machine.\n"
             "Install one, or use --from-archive with a download."
         )
+    if sys.platform == "darwin" and ".app/Contents/MacOS/" in retroarch:
+        bundle = retroarch.split("/Contents/MacOS/")[0]
+        log(f"  bundle   {bundle}")
+        shutil.copytree(bundle, os.path.join(dest, os.path.basename(bundle)), symlinks=True)
+        inner = os.path.join(
+            dest, os.path.basename(bundle), "Contents", "MacOS", os.path.basename(retroarch)
+        )
+        os.chmod(inner, 0o755)
+        log("  note     a copied .app may need re-signing to run on another Mac")
+        return inner
     if is_a_wrapper(retroarch):
         raise SystemExit(
             f"{retroarch} is a launcher, not RetroArch itself\n"
@@ -283,10 +338,11 @@ def copy_cores(source, dest):
     return copied
 
 
-def load_manifest():
-    if not os.path.isfile(MANIFEST):
-        raise SystemExit(f"no manifest at {MANIFEST}")
-    with open(MANIFEST, encoding="utf-8") as handle:
+def load_manifest(path=None):
+    path = path or MANIFEST
+    if not os.path.isfile(path):
+        raise SystemExit(f"no manifest at {path}")
+    with open(path, encoding="utf-8") as handle:
         return json.load(handle)
 
 
@@ -296,57 +352,85 @@ def platform_key():
     return f"{sys.platform}-{arch.get(machine, machine)}"
 
 
-def stage_from_manifest(dest, want_cores, record):
+def archive_suffix(url):
+    """The suffix a URL's file has, `.tar.gz` included.
+
+    `os.path.splitext` stops at the last dot, so a tarball comes back as
+    `.gz` and is then handed to the gzip-unaware branch of `extract`.
+    """
+    name = os.path.basename(url.split("?")[0]).lower()
+    for suffix in (".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".7z", ".zip", ".appimage", ".tar"):
+        if name.endswith(suffix):
+            return suffix
+    return os.path.splitext(name)[1]
+
+
+def sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def stage_from_manifest(dest, want_cores, record, force, manifest_path):
     import urllib.request
 
-    manifest = load_manifest()
+    manifest = load_manifest(manifest_path)
     key = platform_key()
     entry = manifest.get("platforms", {}).get(key)
     if not entry or not entry.get("url"):
         raise SystemExit(
             f"The manifest has no download for {key}.\n"
-            f"Add one to {os.path.relpath(MANIFEST, ROOT)}, or use --from-archive."
+            f"Add one to {os.path.relpath(manifest_path, ROOT)}, or use --from-archive."
         )
     url = entry["url"]
-    log(f"  fetching {url}")
-    tmp = os.path.join(RESOURCES, ".download")
-    os.makedirs(RESOURCES, exist_ok=True)
-    with urllib.request.urlopen(url, timeout=120) as response, open(tmp, "wb") as out:
-        shutil.copyfileobj(response, out)
-
-    digest = hashlib.sha256()
-    with open(tmp, "rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    got = digest.hexdigest()
     expected = entry.get("sha256")
-    if record:
-        entry["sha256"] = got
-        manifest.setdefault("platforms", {})[key] = entry
-        with open(MANIFEST, "w", encoding="utf-8") as handle:
-            json.dump(manifest, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-        log(f"  recorded sha256 {got}")
-    elif not expected:
-        os.remove(tmp)
-        raise SystemExit(
-            f"The manifest has no sha256 for {key}. Re-run with --record to pin\n"
-            "the hash of what you just downloaded, having satisfied yourself it\n"
-            "is the right file."
-        )
-    elif expected != got:
-        os.remove(tmp)
-        raise SystemExit(f"sha256 mismatch\n  expected {expected}\n  got      {got}")
+    log(f"  fetching {url}")
 
-    named = tmp + os.path.splitext(url)[1]
-    os.replace(tmp, named)
-    extract(named, dest)
-    os.remove(named)
-    flatten(dest)
-    binary = find_binary(dest)
-    if not binary:
-        raise SystemExit(f"no RetroArch binary inside {url}")
-    os.chmod(binary, 0o755)
+    # Downloaded outside the staging directory, which is tracked, so a failed
+    # run cannot leave a part-file where a build would find it.
+    handle, tmp = tempfile.mkstemp(prefix="den-runtime-", suffix=archive_suffix(url))
+    os.close(handle)
+    try:
+        with urllib.request.urlopen(url, timeout=120) as response, open(tmp, "wb") as out:
+            shutil.copyfileobj(response, out)
+        got = sha256_of(tmp)
+
+        if expected and expected != got and not (record and force):
+            raise SystemExit(
+                f"sha256 mismatch\n  expected {expected}\n  got      {got}\n"
+                "The file at that URL is not the one this manifest was pinned to.\n"
+                "If the change is expected, re-pin deliberately: --record --force."
+            )
+        if not expected and not record:
+            raise SystemExit(
+                f"The manifest has no sha256 for {key}. Re-run with --record to pin\n"
+                "the hash of what you just downloaded, having satisfied yourself it\n"
+                "is the right file."
+            )
+
+        # Unpack before pinning: a 404 page or a truncated download should
+        # never end up recorded in a tracked file as though it were verified.
+        extract(tmp, dest)
+        promote(dest)
+        binary = find_binary(dest)
+        if not binary:
+            raise SystemExit(f"no RetroArch binary inside {url}")
+        os.chmod(binary, 0o755)
+
+        if record and got != expected:
+            entry["sha256"] = got
+            manifest.setdefault("platforms", {})[key] = entry
+            with open(manifest_path, "w", encoding="utf-8") as out:
+                json.dump(manifest, out, indent=2, sort_keys=True)
+                out.write("\n")
+            was = f" (was {expected})" if expected else ""
+            log(f"  recorded sha256 {got}{was}")
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
     if want_cores:
         log("  cores    a downloaded RetroArch fetches its own on first run")
     return binary
@@ -361,13 +445,15 @@ def main():
     parser.add_argument("--into", default=RUNTIME, help="where to stage (default: the bundle resources)")
     parser.add_argument("--no-cores", action="store_true", help="stage RetroArch only")
     parser.add_argument("--record", action="store_true", help="with --from-manifest, pin the hash of what was downloaded")
+    parser.add_argument("--force", action="store_true", help="with --record, replace a hash that is already pinned")
+    parser.add_argument("--manifest", default=MANIFEST, help="the manifest to read (default: tools/runtime-manifest.json)")
     parser.add_argument("--check", action="store_true", help="say what is here and what would be staged, and change nothing")
     parser.add_argument("--allow-missing", action="store_true", help="exit 0 when there is nothing to stage (for builds)")
     parser.add_argument("--keep-existing", action="store_true", help="leave an already-staged runtime alone (for builds)")
     args = parser.parse_args()
 
     if args.check:
-        return check(args.into)
+        return check(args.into, args.manifest)
 
     dest = args.into
     # A build must never destroy a runtime that was staged on purpose. The
@@ -386,13 +472,15 @@ def main():
         if args.from_archive:
             log(f"  source   {args.from_archive}")
             extract(args.from_archive, dest)
-            flatten(dest)
+            promote(dest)
             binary = find_binary(dest)
             if not binary:
                 raise SystemExit(f"no RetroArch binary inside {args.from_archive}")
             os.chmod(binary, 0o755)
         elif args.from_manifest:
-            binary = stage_from_manifest(dest, not args.no_cores, args.record)
+            binary = stage_from_manifest(
+                dest, not args.no_cores, args.record, args.force, args.manifest
+            )
         else:
             binary = stage_from_system(dest, not args.no_cores)
     except SystemExit as e:
@@ -426,7 +514,7 @@ def clear(dest):
         shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
 
 
-def check(dest):
+def check(dest, manifest_path=None):
     log("What Den would bundle")
     retroarch = find_system_retroarch()
     log(f"  on this machine   {retroarch or 'nothing found'}")
@@ -438,7 +526,8 @@ def check(dest):
             log(f"  of Den's defaults {len(have)}/{len(CORE_LICENCES)} installed")
     staged = find_binary(dest) if os.path.isdir(dest) else None
     log(f"  already staged    {staged or 'nothing'}")
-    manifest = load_manifest() if os.path.isfile(MANIFEST) else {}
+    manifest_path = manifest_path or MANIFEST
+    manifest = load_manifest(manifest_path) if os.path.isfile(manifest_path) else {}
     entry = manifest.get("platforms", {}).get(platform_key(), {})
     log(f"  manifest for {platform_key():<12} {entry.get('url') or 'no url'}")
     return 0

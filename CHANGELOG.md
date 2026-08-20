@@ -63,6 +63,45 @@ the build plan's milestones, not semver.
   and for the glue object and its sessions (`crates/den-core/tests`).
 
 ### Fixed
+- **The runtime bundler put the binary where Den never looks.** Published
+  builds unpack into a wrapper directory, and the staging directory has a
+  committed README in it, so the "lift the wrapper if it is the only entry"
+  rule never fired on the real case — and failed quietly, reporting a staged
+  runtime that the runner could not see. Whatever directory the binary lands
+  in now comes up to the top, cores and libraries with it.
+- `--record` skipped hash verification entirely, so re-running it silently
+  replaced a hash somebody had pinned by hand — including with the hash of a
+  404 page. It now refuses a mismatch unless `--record --force` says so
+  deliberately, and it pins only after the download has proved to be an
+  archive with a RetroArch in it.
+- `tarfile.extractall` ran with no `filter`, which on Python 3.11 trusts a
+  member called `../ESCAPED` completely, and which Python 3.14 changes under
+  us. Pinned to `data`.
+- A download that failed left its part-file inside the tracked staging
+  directory; it now goes to a temporary file that is removed either way. A
+  `.tar.gz` URL was named `.gz` and handed to the wrong branch of the
+  unpacker. `zipfile` dropped the executable bit off everything it wrote.
+- `find_core_dir` in the bundler still took the first directory that merely
+  existed — the same bug fixed in the runner.
+- **`set_retroarch_path` changed the runner before writing the setting** and
+  left it changed when the write failed, so a choice worked until the next
+  restart and then silently did not. A non-UTF-8 path was stored lossily and
+  came back pointing somewhere else; it is refused with a reason now.
+- A launch whose session row could not be written dropped the process handle,
+  leaking an emulator Den could never reap.
+- **PlayStation 2, GameCube and Wii were blamed on a missing core.** They
+  cannot be launched at all yet, so the Core Downloader would not have helped.
+  Play now gives one reason, and it is the true one.
+- Accessibility: the Play button carries its reason programmatically
+  (`aria-describedby`) rather than merely beside it; the RetroArch notice is a
+  live region, so choosing or clearing one is announced; a re-render no longer
+  drops focus to `<body>` or folds the "Where Den looked" list shut under
+  whoever was reading it.
+- `den-doctor` created a library as a side effect of diagnosing one, and its
+  closing advice omitted the only thing that fixes a stale chosen path.
+- The build called `python3`, which a stock Windows Python install does not
+  provide; `tools/run-python.mjs` asks the machine what it has, and a machine
+  with no Python still builds, without a bundled runtime.
 - **`Fatal error received in: "init_libretro_symbols()"`.** RetroArch's way of
   saying it could not load the core. Den passed `-L` a bare file name whenever
   it had not found a cores directory, and its guesses at that directory never
@@ -199,7 +238,7 @@ the build plan's milestones, not semver.
   committed `__pycache__`.
 
 ### Verified
-- `cargo test --workspace` green: 78 tests across the seven crates.
+- `cargo test --workspace` green: 81 tests across the seven crates.
 - `cargo clippy --workspace --all-targets -- -D warnings` and
   `cargo fmt --all --check` clean.
 - `npm run build` (types and bundle) clean, with no unresolved assets.

@@ -112,6 +112,60 @@ def test_from_archive_zip(tmp):
     )
 
 
+def test_from_archive_wrapper_with_siblings(tmp):
+    """The shape a real build actually has: a wrapper directory, plus debris.
+
+    This is the case the destination's own committed README used to break:
+    with anything else present, the wrapper was never lifted and the binary
+    landed where den-runner does not look.
+    """
+    src = os.path.join(tmp, "wrapper-src", "RetroArch-Linux-x86_64")
+    plant_retroarch(src)
+    plant_cores(os.path.join(src, "cores"))
+    archive = os.path.join(tmp, "RetroArch-wrapped.zip")
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.write(os.path.join(src, "retroarch"), "RetroArch-Linux-x86_64/retroarch")
+        ext = {"win32": ".dll", "darwin": ".dylib"}.get(sys.platform, ".so")
+        zf.write(
+            os.path.join(src, "cores", f"mesen_libretro{ext}"),
+            f"RetroArch-Linux-x86_64/cores/mesen_libretro{ext}",
+        )
+        # What a zip built on macOS carries alongside.
+        zf.writestr("__MACOSX/._retroarch", b"junk")
+
+    dest = os.path.join(tmp, "staged-wrapper-dir")
+    os.makedirs(dest, exist_ok=True)
+    with open(os.path.join(dest, "README.md"), "w", encoding="utf-8") as handle:
+        handle.write("# committed\n")
+
+    result = run(["--from-archive", archive, "--into", dest])
+    binary = staged_binary(dest)
+    check("a wrapped build lands at the top level", binary == os.path.join(dest, "retroarch"), f"got {binary}")
+    ext = {"win32": ".dll", "darwin": ".dylib"}.get(sys.platform, ".so")
+    check(
+        "  and its cores travel with it",
+        os.path.isfile(os.path.join(dest, "cores", f"mesen_libretro{ext}")),
+        str(os.listdir(dest)),
+    )
+    check("  and the macOS sidecar is swept up", not os.path.isdir(os.path.join(dest, "__MACOSX")))
+    check("  and the committed README survives", os.path.isfile(os.path.join(dest, "README.md")))
+
+
+def test_tar_traversal_is_refused(tmp):
+    """A tarball that writes outside the destination must not be unpacked."""
+    outside = os.path.join(tmp, "ESCAPED")
+    evil = os.path.join(tmp, "evil.tar.gz")
+    payload = os.path.join(tmp, "payload")
+    with open(payload, "w", encoding="utf-8") as handle:
+        handle.write("owned")
+    with tarfile.open(evil, "w:gz") as tf:
+        tf.add(payload, "../ESCAPED")
+
+    dest = os.path.join(tmp, "staged-evil")
+    run(["--from-archive", evil, "--into", dest], expect=1)
+    check("a tar member escaping the destination is refused", not os.path.exists(outside))
+
+
 def test_from_archive_tar(tmp):
     src = os.path.join(tmp, "ra-tar-src")
     binary = plant_retroarch(src)
@@ -142,63 +196,124 @@ def test_from_archive_directory(tmp):
     check("--from-archive takes an unpacked directory", staged_binary(dest) is not None, result.stderr)
 
 
+def platform_key():
+    """Exactly what the script computes, imported rather than re-derived."""
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import bundle_runtime
+
+    return bundle_runtime.platform_key()
+
+
 def test_manifest_download(tmp):
-    """The download path, its hash check, and its refusal to trust an unpinned file."""
+    """The download path, its hash check, and its refusal to trust an unpinned file.
+
+    Driven against a local server and a throwaway manifest: the tracked
+    `tools/runtime-manifest.json` is never written to, so an interrupted run
+    cannot leave the repository dirty.
+    """
     served = os.path.join(tmp, "served")
     os.makedirs(served, exist_ok=True)
     payload = os.path.join(served, "RetroArch.zip")
-    src = os.path.join(tmp, "ra-served")
+    src = os.path.join(tmp, "ra-served", "RetroArch-Linux-x86_64")
     plant_retroarch(src)
     with zipfile.ZipFile(payload, "w") as zf:
-        zf.write(os.path.join(src, "retroarch"), "retroarch")
+        # A wrapper directory, as every real build has.
+        zf.write(os.path.join(src, "retroarch"), "RetroArch-Linux-x86_64/retroarch")
 
     handler = lambda *a, **k: http.server.SimpleHTTPRequestHandler(*a, directory=served, **k)
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{server.server_port}/RetroArch.zip"
 
-    manifest_path = os.path.join(ROOT, "tools", "runtime-manifest.json")
-    backup = manifest_path + ".test-backup"
-    shutil.copy2(manifest_path, backup)
-    try:
-        with open(manifest_path, encoding="utf-8") as handle:
-            manifest = json.load(handle)
-        key = f"{sys.platform}-{os.uname().machine}"
-        manifest["platforms"][key] = {"url": url, "sha256": None}
-        with open(manifest_path, "w", encoding="utf-8") as handle:
-            json.dump(manifest, handle, indent=2, sort_keys=True)
+    manifest_path = os.path.join(tmp, "manifest.json")
+    key = platform_key()
 
+    def write_manifest(sha):
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump({"platforms": {key: {"url": url, "sha256": sha}}}, handle)
+
+    def read_manifest():
+        with open(manifest_path, encoding="utf-8") as handle:
+            return json.load(handle)["platforms"][key]["sha256"]
+
+    try:
         dest = os.path.join(tmp, "staged-manifest")
-        # Unpinned: refuses rather than trusting whatever arrived.
-        result = run(["--from-manifest", "--into", dest], expect=1)
+
+        write_manifest(None)
+        result = run(["--from-manifest", "--into", dest, "--manifest", manifest_path], expect=1)
         check(
             "--from-manifest refuses an unpinned download",
             result.returncode == 1 and "sha256" in (result.stdout + result.stderr),
             result.stdout + result.stderr,
         )
 
-        # --record pins it, and then the same download verifies.
-        result = run(["--from-manifest", "--into", dest, "--record"])
+        result = run(["--from-manifest", "--into", dest, "--manifest", manifest_path, "--record"])
         check("--record pins the hash and stages", staged_binary(dest) is not None, result.stderr)
-        with open(manifest_path, encoding="utf-8") as handle:
-            recorded = json.load(handle)["platforms"][key]["sha256"]
-        check("  and writes the hash into the manifest", bool(recorded), str(recorded))
+        check("  and writes the hash into the manifest", bool(read_manifest()), str(read_manifest()))
+        # The wrapper directory has to be lifted, or den-runner never sees it.
+        check(
+            "  and the binary lands where den-runner looks",
+            staged_binary(dest) == os.path.join(dest, "retroarch"),
+            f"got {staged_binary(dest)}",
+        )
 
-        result = run(["--from-manifest", "--into", dest])
+        result = run(["--from-manifest", "--into", dest, "--manifest", manifest_path])
         check("  and a pinned download verifies", staged_binary(dest) is not None, result.stderr)
 
-        # A hash that does not match is refused.
-        manifest["platforms"][key] = {"url": url, "sha256": "0" * 64}
-        with open(manifest_path, "w", encoding="utf-8") as handle:
-            json.dump(manifest, handle, indent=2, sort_keys=True)
-        result = run(["--from-manifest", "--into", dest], expect=1)
+        write_manifest("0" * 64)
+        result = run(["--from-manifest", "--into", dest, "--manifest", manifest_path], expect=1)
         check(
             "  and a wrong hash is refused",
             result.returncode == 1 and "mismatch" in (result.stdout + result.stderr),
             result.stdout + result.stderr,
         )
+
+        # --record must not quietly replace a hash somebody pinned by hand.
+        result = run(
+            ["--from-manifest", "--into", dest, "--manifest", manifest_path, "--record"], expect=1
+        )
+        check(
+            "  and --record alone will not overwrite an existing pin",
+            result.returncode == 1 and "mismatch" in (result.stdout + result.stderr),
+            result.stdout + result.stderr,
+        )
+        check("  leaving the pinned hash untouched", read_manifest() == "0" * 64, read_manifest())
+
+        result = run(
+            ["--from-manifest", "--into", dest, "--manifest", manifest_path, "--record", "--force"]
+        )
+        check("  but --record --force re-pins deliberately", result.returncode == 0, result.stderr)
+        check("  and records the new hash", read_manifest() != "0" * 64, read_manifest())
     finally:
-        shutil.move(backup, manifest_path)
+        server.shutdown()
+
+
+def test_download_failure_leaves_nothing_behind(tmp):
+    """A 404 must not pin a hash or leave a part-file in the tracked tree."""
+    served = os.path.join(tmp, "served-empty")
+    os.makedirs(served, exist_ok=True)
+    handler = lambda *a, **k: http.server.SimpleHTTPRequestHandler(*a, directory=served, **k)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_port}/not-a-real-build.zip"
+
+    manifest_path = os.path.join(tmp, "manifest-404.json")
+    key = platform_key()
+    with open(manifest_path, "w", encoding="utf-8") as handle:
+        json.dump({"platforms": {key: {"url": url, "sha256": None}}}, handle)
+
+    dest = os.path.join(tmp, "staged-404")
+    try:
+        result = run(
+            ["--from-manifest", "--into", dest, "--manifest", manifest_path, "--record"], expect=1
+        )
+        check("a failed download does not stage", result.returncode != 0, result.stdout)
+        with open(manifest_path, encoding="utf-8") as handle:
+            pinned = json.load(handle)["platforms"][key]["sha256"]
+        check("  and does not pin a hash for it", pinned is None, str(pinned))
+        leftovers = os.listdir(dest) if os.path.isdir(dest) else []
+        check("  and leaves no part-file behind", leftovers in ([], ["README.md"]), str(leftovers))
+    finally:
         server.shutdown()
 
 
@@ -286,10 +401,13 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         test_from_system(tmp)
         test_from_archive_zip(tmp)
+        test_from_archive_wrapper_with_siblings(tmp)
+        test_tar_traversal_is_refused(tmp)
         test_from_archive_tar(tmp)
         test_from_archive_appimage(tmp)
         test_from_archive_directory(tmp)
         test_manifest_download(tmp)
+        test_download_failure_leaves_nothing_behind(tmp)
         test_allow_missing(tmp)
         test_readme_survives(tmp)
         test_keep_existing(tmp)

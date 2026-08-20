@@ -26,6 +26,13 @@ fn main() {
     );
     println!("  library       {}", library.display());
 
+    // A diagnostic reports; it does not create things. Opening a library
+    // makes one, so a mistyped path would leave an empty library behind and
+    // report cheerfully on it.
+    let exists = library.join("library.db").is_file();
+    if !exists {
+        println!("  (no library here yet — it is made on first run)");
+    }
     let den = match Den::open(&library) {
         Ok(den) => den,
         Err(e) => {
@@ -33,6 +40,13 @@ fn main() {
             std::process::exit(1);
         }
     };
+    if !exists {
+        // Put back what opening it just made.
+        let _ = std::fs::remove_file(library.join("library.db"));
+        let _ = std::fs::remove_file(library.join("library.db-wal"));
+        let _ = std::fs::remove_file(library.join("library.db-shm"));
+        let _ = std::fs::remove_dir(&library);
+    }
 
     println!(
         "  games         {}",
@@ -118,11 +132,22 @@ fn main() {
     }
 
     if !status.available {
-        println!(
-            "\nNothing here is fatal: Den shelves and names games without RetroArch.\n\
-             To play, either install RetroArch, or point Den at it — \"Choose RetroArch…\"\n\
-             on the Library screen, or set RETROARCH to the binary."
-        );
+        println!("\nNothing here is fatal: Den shelves and names games without RetroArch.");
+        if status.chosen {
+            // The search is switched off while a chosen path stands, so
+            // "install RetroArch" would not help until this is dealt with.
+            println!(
+                "A RetroArch was chosen by hand and no longer works, and while that\n\
+                 stands Den does not search at all. Either choose another —\n\
+                 \"Choose RetroArch…\" on the Library screen — or press \"Use the\n\
+                 automatic search again\" beside it to hand the choice back."
+            );
+        } else {
+            println!(
+                "To play, either install RetroArch, or point Den at it — \"Choose RetroArch…\"\n\
+                 on the Library screen, or set RETROARCH to the binary."
+            );
+        }
     }
 }
 

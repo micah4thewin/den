@@ -34,6 +34,9 @@ pub enum Error {
     /// A system Den knows about but cannot boot through RetroArch yet.
     #[error("external emulator profile required for {0} (not wired in v1)")]
     External(String),
+    /// Something the interface asked for that Den cannot do with it.
+    #[error("{0}")]
+    Unusable(String),
 }
 
 /// What a successful launch reports back to the shell.
@@ -77,6 +80,11 @@ pub struct CoreStatus {
     /// Whether it is installed. `None` when Den could not find a cores
     /// directory to look in, and so has nothing honest to say either way.
     pub installed: Option<bool>,
+    /// Set when this system cannot be launched at all yet, whatever is
+    /// installed: PlayStation 2, GameCube and Wii need external emulator
+    /// profiles. Saying "the core is missing" there would send somebody to
+    /// the Core Downloader for a core that would not help.
+    pub unsupported: Option<String>,
 }
 
 /// The library setting holding a RetroArch picked by hand.
@@ -84,7 +92,10 @@ const RETROARCH_SETTING: &str = "retroarch_path";
 
 /// One launched emulator and the session row that is open for it.
 struct Live {
-    session_id: i64,
+    /// `None` when the row could not be written. The process is still ours to
+    /// wait on -- dropping the handle would leave an emulator Den can never
+    /// reap, and a zombie behind it once it exits.
+    session_id: Option<i64>,
     process: Running,
 }
 
@@ -174,20 +185,20 @@ impl Den {
         // A launch that is not written down is a launch the library forgets:
         // playtime, Recent, and the Continue row are all read back out of the
         // sessions table.
-        match self.db.start_session(game_id) {
-            Ok(session_id) => {
-                if let Ok(mut live) = self.live.lock() {
-                    live.push(Live {
-                        session_id,
-                        process,
-                    });
-                }
-            }
+        let session_id = match self.db.start_session(game_id) {
+            Ok(id) => Some(id),
             Err(e) => {
                 // The emulator is already up; losing the row costs a line of
                 // history, not the game someone asked to play.
                 log_session_error(&e);
+                None
             }
+        };
+        if let Ok(mut live) = self.live.lock() {
+            live.push(Live {
+                session_id,
+                process,
+            });
         }
         Ok(LaunchInfo {
             pid,
@@ -212,7 +223,7 @@ impl Den {
                 false
             }
         });
-        for session_id in finished {
+        for session_id in finished.into_iter().flatten() {
             let _ = self.db.end_session(session_id);
         }
     }
@@ -268,12 +279,23 @@ impl Den {
     /// The core a game would launch with, and whether it is installed.
     pub fn core_status(&self, game: &Game) -> CoreStatus {
         let name = core_for(game);
+        if let Some(reason) = external_only(&game.system) {
+            return CoreStatus {
+                name,
+                installed: None,
+                unsupported: Some(reason),
+            };
+        }
         let installed = if name.is_empty() {
             Some(false)
         } else {
             self.runner.core_installed(&name)
         };
-        CoreStatus { name, installed }
+        CoreStatus {
+            name,
+            installed,
+            unsupported: None,
+        }
     }
 
     /// Tell Den where this build's bundled runtime lives. The shell calls
@@ -288,38 +310,44 @@ impl Den {
     /// The path is checked before it is kept: a setting that does not work is
     /// worse than no setting, because it also switches the search off.
     pub fn set_retroarch_path(&self, path: Option<PathBuf>) -> Result<RetroArchStatus, Error> {
+        let previous = self.runner.chosen();
         match path {
             Some(path) => {
+                // A path that cannot be written down exactly cannot be read
+                // back: `to_string_lossy` would replace the bytes it does not
+                // understand and hand back a path to somewhere else entirely.
+                let Some(text) = path.to_str() else {
+                    return Err(Error::Unusable(format!(
+                        "`{}` is not valid UTF-8, so Den cannot store it. \
+                         Set RETROARCH to it instead.",
+                        path.display()
+                    )));
+                };
                 // Kept as picked, not canonicalized: resolving the symlink
                 // behind a Flatpak or Snap wrapper turns it into the
                 // multiplexer it points at, which is not RetroArch.
                 self.runner.set_chosen(Some(path.clone()));
                 if let Err(e) = self.runner.locate() {
-                    // Put it back the way it was rather than leaving the
-                    // library pointed at something that cannot run.
-                    self.restore_chosen();
+                    self.runner.set_chosen(previous);
                     return Err(Error::Runner(e));
                 }
-                self.db
-                    .set_setting(RETROARCH_SETTING, Some(&path.to_string_lossy()))?;
+                if let Err(e) = self.db.set_setting(RETROARCH_SETTING, Some(text)) {
+                    // The runner and the library have to agree. Leaving the
+                    // runner changed after the write failed means the choice
+                    // works until the next restart and then silently does not.
+                    self.runner.set_chosen(previous);
+                    return Err(Error::Db(e));
+                }
             }
             None => {
                 self.runner.set_chosen(None);
-                self.db.set_setting(RETROARCH_SETTING, None)?;
+                if let Err(e) = self.db.set_setting(RETROARCH_SETTING, None) {
+                    self.runner.set_chosen(previous);
+                    return Err(Error::Db(e));
+                }
             }
         }
         Ok(self.retroarch_status())
-    }
-
-    /// Put the runner back on whatever the library has written down.
-    fn restore_chosen(&self) {
-        let saved = self
-            .db
-            .setting(RETROARCH_SETTING)
-            .ok()
-            .flatten()
-            .map(PathBuf::from);
-        self.runner.set_chosen(saved);
     }
 }
 
@@ -330,7 +358,7 @@ impl Drop for Den {
         let sessions: Vec<i64> = self
             .live
             .get_mut()
-            .map(|live| live.iter().map(|e| e.session_id).collect())
+            .map(|live| live.iter().filter_map(|e| e.session_id).collect())
             .unwrap_or_default();
         for session_id in sessions {
             let _ = self.db.end_session(session_id);
@@ -342,6 +370,16 @@ fn log_session_error(e: &rusqlite::Error) {
     // den-core has no logger of its own; the shell installs one and this is
     // the only line that would use it, so it goes to stderr plainly.
     eprintln!("den: could not record the play session: {e}");
+}
+
+/// Why a system cannot be launched at all, if it cannot.
+fn external_only(system: &str) -> Option<String> {
+    match system_from_name(system) {
+        Some(System::Ps2) | Some(System::Gamecube) | Some(System::Wii) => Some(format!(
+            "{system} needs an external emulator, which Den does not drive yet"
+        )),
+        _ => None,
+    }
 }
 
 /// The core a game launches with: its own override, else its system's
