@@ -246,6 +246,14 @@ the build plan's milestones, not semver.
 - All four screens rendered and driven in a real browser, light and dark.
 
 ### Known gaps
+- Two findings from the review were left alone deliberately, both low:
+  `choose_folder` and `choose_retroarch` open a blocking file dialog from a
+  command thread, which can hold the window while it is up — moving to
+  `rfd::AsyncFileDialog` changes feature flags that cannot be compiled in the
+  environment this was written in, and breaking a build that works to fix a
+  freeze that may not happen is the wrong trade. And `is_executable` reads the
+  file's mode bits rather than asking whether *this* process may execute it,
+  which differs only for a file owned by somebody else with a narrow mode.
 - The URLs in `tools/runtime-manifest.json` were written without being reached:
   the environment this was built in cannot resolve that host. They are not
   pinned to a hash, and `--from-manifest` refuses to stage anything unpinned,
