@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Den</title>
+  <!-- The same mark tools/brand.py rasterizes onto the application icon.
+       It is drawn in currentColor, which an icon context resolves to the
+       window's own text colour, so one file serves both modes. -->
+  <link rel="icon" href="/brand-mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <!--
@@ -62,10 +66,11 @@
           <span class="quiet">Drop a pile of downloads; every file gets a word.</span>
         </div>
         <div class="dropzone" id="dropzone" role="button" tabindex="0"
-             aria-label="Drop files here to add them to the library">
+             aria-label="Choose a folder to add to the library, or drop files here">
           <span data-icon="folder"></span>
           <span class="big-word">Drop files or folders here</span>
-          <span class="quiet" id="drop-hint">Every original stays untouched. Nothing is deleted.</span>
+          <span class="quiet" id="drop-hint">Or press it to choose a folder. Every original stays
+            untouched. Nothing is deleted.</span>
         </div>
         <div class="row">
           <button type="button" id="btn-choose">Choose a folder…</button>

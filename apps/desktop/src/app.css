@@ -264,6 +264,16 @@
   gap: var(--gap-1);
 }
 
+/* The same quiet section label the shelves and the report card use. A field
+ * heading is a label for the list under it, not a second title for the page. */
+.game-meta .field h2 {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .extra-list {
   list-style: none;
   margin: 0;
@@ -333,6 +343,23 @@
   border-bottom: 1px solid var(--edge);
 }
 
+/* The tally is the report in one line: the same words, counted. */
+.report-tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-2) var(--gap-3);
+  padding: var(--gap-3) var(--gap-4);
+  border-bottom: 1px solid var(--edge);
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+
+.report-tally .count {
+  font-weight: var(--w-bold);
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
 .report-entry {
   display: flex;
   align-items: center;
@@ -343,8 +370,13 @@
 
 .report-entry:last-child { border-bottom: none; }
 
+/* A common width, so the filenames start on one line down the card and the
+ * eye can run the words on their own. The two long words grow past it rather
+ * than being cut. */
 .report-entry .word {
   flex: 0 0 auto;
+  min-width: 5.4rem;
+  text-align: center;
   font-size: 0.72rem;
   font-weight: var(--w-bold);
   letter-spacing: 0.03em;
@@ -413,6 +445,11 @@
 
 /* ---- toast --------------------------------------------------------------- */
 
+/* Anchored to the bottom-right corner rather than centred, so it enters with
+ * `settle-in` -- a plain rise. The family's `toast-in` ends at
+ * `translate(-50%, 0)`, which centres a toast that was laid out from the
+ * middle and shunts one laid out from a corner half its own width sideways,
+ * permanently, because the entrance carries a fill mode. */
 .toast {
   position: fixed;
   bottom: var(--gap-4);
@@ -423,12 +460,9 @@
   background: var(--solid);
   color: var(--text-on-solid);
   box-shadow: var(--lift-3);
-  animation: toast-in var(--dur-3) var(--ease) both;
+  animation: settle-in var(--dur-3) var(--ease);
   font-size: 0.86rem;
 }
-
-/* A long operation breathes instead of spinning. */
-.breathe { animation: breathe 1.8s var(--ease-soft) infinite; }
 
 .empty {
   padding: var(--gap-5);

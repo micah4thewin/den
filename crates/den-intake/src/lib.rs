@@ -11,7 +11,7 @@ mod util;
 pub use bios::BiosIndex;
 pub use identify::{identify, FileKind, Identification};
 pub use shelve::Shelf;
-pub use unpack::{unpack_recursive, UnpackFailure, UnpackError};
+pub use unpack::{unpack_recursive, UnpackError, UnpackFailure};
 
 use den_ident::dat::Index;
 use serde::{Deserialize, Serialize};
@@ -25,21 +25,47 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[serde(tag = "word", content = "detail")]
 pub enum Outcome {
     /// Shelved as a new game.
-    Added { game: String },
+    Added {
+        /// The title it was shelved under.
+        game: String,
+    },
     /// A byte-for-byte copy of a game already on the shelf.
-    Duplicate { game: String },
+    Duplicate {
+        /// The title it duplicates.
+        game: String,
+    },
     /// Shelved after a repair (a missing .cue was written, for example).
-    Repaired { game: String, note: String },
+    Repaired {
+        /// The title it was shelved under.
+        game: String,
+        /// What the repair was, in words.
+        note: String,
+    },
     /// Identified only by header or extension, not a hash match.
-    Probable { game: String },
+    Probable {
+        /// The title Den guessed.
+        game: String,
+    },
     /// A BIOS file, recognised and filed automatically.
-    Bios { name: String },
+    Bios {
+        /// The canonical name for this BIOS.
+        name: String,
+    },
     /// A rider file (manual, art, readme, save) that rides along.
-    Extra { note: String },
+    Extra {
+        /// What kind of rider it was.
+        note: String,
+    },
     /// Could not be used, kept with a reason and a retry path.
-    Quarantined { reason: String },
+    Quarantined {
+        /// Why it could not be used.
+        reason: String,
+    },
     /// A format Den does not support.
-    Unsupported { reason: String },
+    Unsupported {
+        /// Why the format is out of scope.
+        reason: String,
+    },
 }
 
 impl Outcome {
@@ -61,15 +87,20 @@ impl Outcome {
 /// One input file and its word.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReportEntry {
+    /// The input file this line accounts for.
     pub input: String,
+    /// The word it earned.
     pub outcome: Outcome,
 }
 
 /// The intake report card: every input file accounted for.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Report {
+    /// Unix time the run began.
     pub started: i64,
+    /// Unix time the run ended.
     pub finished: i64,
+    /// One line per input file, in the order they were filed.
     pub entries: Vec<ReportEntry>,
 }
 
@@ -96,8 +127,10 @@ pub struct IntakeOptions<'a> {
     pub password: Option<String>,
 }
 
+/// Why a whole intake run could not start or finish.
 #[derive(Debug, thiserror::Error)]
 pub enum IntakeError {
+    /// Staging the drop, or reading it, failed.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }

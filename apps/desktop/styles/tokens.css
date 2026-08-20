@@ -80,86 +80,10 @@
   font-display: swap;
 }
 
-/* ---- handwriting, for the whiteboard --------------------------------- */
-
-/* Three faces under the SIL Open Font License, bundled rather than hoped
- * for. What used to be here was a stack of names -- Virgil, Segoe Print,
- * Bradley Hand -- that a machine either had or did not, and most do not:
- * the board fell through to Comic Sans on Windows and to whatever the
- * engine calls `cursive` everywhere else, which on Linux is usually
- * nothing at all. A drawing that looks handwritten on the machine it was
- * made on and typeset on the next one is not a drawing anybody trusts.
- *
- * `latin` and `latin-ext` only. See OFL-NOTICE.md in public/fonts. */
-
-@font-face {
-  font-family: "Caveat";
-  src: url("/fonts/Caveat-latin.woff2") format("woff2");
-  font-weight: 400 700;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
-    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
-    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "Caveat";
-  src: url("/fonts/Caveat-latin-ext.woff2") format("woff2");
-  font-weight: 400 700;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
-    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
-    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
-}
-
-@font-face {
-  font-family: "Architects Daughter";
-  src: url("/fonts/ArchitectsDaughter-latin.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
-    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
-    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "Architects Daughter";
-  src: url("/fonts/ArchitectsDaughter-latin-ext.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
-    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
-    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
-}
-
-@font-face {
-  font-family: "Patrick Hand";
-  src: url("/fonts/PatrickHand-latin.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
-    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
-    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "Patrick Hand";
-  src: url("/fonts/PatrickHand-latin-ext.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
-    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
-    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
-}
+/* Den bundles two faces and asks for no others. The family sheet also
+ * carries three handwriting faces for lockbox's whiteboard; Den has no
+ * whiteboard, and @font-face rules pointing at files this repository does
+ * not ship are six requests that can only 404. */
 
 /* ---- seeds: light ---------------------------------------------------- */
 
@@ -377,18 +301,6 @@
   --font-ui: "Avenir Next LT Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace;
   --font-serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
-  /* Handwriting, for a whiteboard. Excalidraw's own Virgil first, so a
-   * scene drawn there and opened here is the scene that was drawn; then
-   * Architects Daughter, which is bundled and is the closest of the three
-   * to Virgil's marker. Everything after it is a machine that has one of
-   * these already and a reader who would rather see it. */
-  --font-hand: "Virgil", "Excalifont", "Architects Daughter", "Segoe Print",
-    "Bradley Hand", "Chalkboard SE", cursive;
-  /* The other two hands, each its own choice on the board rather than a
-   * fallback: Caveat joins its letters and slants, Patrick Hand prints
-   * upright and reads at a distance. */
-  --font-script: "Caveat", "Segoe Script", "Bradley Hand", cursive;
-  --font-print: "Patrick Hand", "Comic Sans MS", "Chalkboard SE", cursive;
 
   /* Avenir ships Regular and Bold only; asking for anything between them
    * gets a synthesized weight that looks smudged at small sizes. */

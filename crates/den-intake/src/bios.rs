@@ -64,7 +64,9 @@ impl BiosIndex {
 
     /// The canonical name for a SHA-1, if the database knows it.
     pub fn by_hash(&self, sha1: &str) -> Option<&str> {
-        self.by_hash.get(&sha1.to_ascii_lowercase()).map(|s| s.as_str())
+        self.by_hash
+            .get(&sha1.to_ascii_lowercase())
+            .map(|s| s.as_str())
     }
 
     /// The canonical name for a filename, if it is a known BIOS name.

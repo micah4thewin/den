@@ -12,16 +12,27 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// A shelved game as the interface sees it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Game {
+    /// The row id, and the handle every other call takes.
     pub id: i64,
+    /// The title as the library shows it.
     pub title: String,
+    /// The system shelf this game sits on.
     pub system: String,
+    /// The shelved file the runner boots.
     pub path: String,
+    /// SHA-1 of the shelved file, when one was taken.
     pub hash: Option<String>,
+    /// Size of the shelved file in bytes.
     pub size: Option<i64>,
+    /// The intake word this game arrived with.
     pub status: String,
+    /// A per-game core override; the system default applies when unset.
     pub core: Option<String>,
+    /// The artwork tile filed for this game, if any.
     pub art: Option<String>,
+    /// Unix time the row was written.
     pub created_at: i64,
+    /// Unix time the row last changed.
     pub updated_at: i64,
     /// Seconds of recorded play time (from sessions), 0 if never played.
     pub playtime: i64,
@@ -32,29 +43,43 @@ pub struct Game {
 /// A save (battery save or state) attached to a game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Save {
+    /// The row id.
     pub id: i64,
+    /// The game this save belongs to.
     pub game_id: i64,
+    /// `battery` or `state`.
     pub kind: String,
+    /// Where the save file lives.
     pub path: String,
+    /// Unix time the row was written.
     pub created_at: i64,
 }
 
 /// A play session: a launch that ran (or is running).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
+    /// The row id.
     pub id: i64,
+    /// The game that was launched.
     pub game_id: i64,
+    /// Unix time the launch happened.
     pub started: i64,
+    /// How long it ran; `None` while it is still running.
     pub duration_seconds: Option<i64>,
 }
 
 /// A BIOS file recognised by hash during intake and filed automatically.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bios {
+    /// The row id.
     pub id: i64,
+    /// The canonical name for this BIOS.
     pub name: String,
+    /// Where it was filed.
     pub path: String,
+    /// SHA-1 of the file.
     pub hash: String,
+    /// Unix time the row was written.
     pub created_at: i64,
 }
 
@@ -172,7 +197,7 @@ impl Db {
     pub fn find_by_path(&self, path: &Path) -> rusqlite::Result<Option<Game>> {
         let mut stmt = self.conn.prepare(&row_sql("WHERE g.path = ?1"))?;
         let game = stmt
-            .query_row(params![path.to_string_lossy()], |row| row_to_game(row))
+            .query_row(params![path.to_string_lossy()], row_to_game)
             .optional()?;
         Ok(game)
     }
@@ -180,25 +205,29 @@ impl Db {
     /// Fetch one game by id.
     pub fn get_game(&self, id: i64) -> rusqlite::Result<Option<Game>> {
         let mut stmt = self.conn.prepare(&row_sql("WHERE g.id = ?1"))?;
-        let game = stmt
-            .query_row(params![id], |row| row_to_game(row))
-            .optional()?;
+        let game = stmt.query_row(params![id], row_to_game).optional()?;
         Ok(game)
     }
 
     /// List games, optionally filtered by a title substring and a system.
     pub fn list_games(&self, filter: &str, system: Option<&str>) -> rusqlite::Result<Vec<Game>> {
-        let (mut sql, mut args): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if filter.is_empty()
-        {
-            (row_sql(""), vec![])
-        } else {
-            (
-                row_sql("WHERE g.title LIKE ?1"),
-                vec![Box::new(format!("%{}%", filter))],
-            )
-        };
+        let (mut sql, mut args): (String, Vec<Box<dyn rusqlite::types::ToSql>>) =
+            if filter.is_empty() {
+                (row_sql(""), vec![])
+            } else {
+                (
+                    // Without ESCAPE, a title containing `%` or `_` -- and plenty
+                    // do -- would be read as a wildcard rather than searched for.
+                    row_sql("WHERE g.title LIKE ?1 ESCAPE '\\'"),
+                    vec![Box::new(format!("%{}%", escape_like(filter)))],
+                )
+            };
         if let Some(system) = system {
-            sql.push_str(if filter.is_empty() { " WHERE " } else { " AND " });
+            sql.push_str(if filter.is_empty() {
+                " WHERE "
+            } else {
+                " AND "
+            });
             sql.push_str("g.system = ?");
             let idx = args.len() + 1;
             sql.push_str(&idx.to_string());
@@ -336,7 +365,7 @@ impl Db {
             game_columns("g")
         );
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![limit], |row| row_to_game(row))?;
+        let rows = stmt.query_map(params![limit], row_to_game)?;
         rows.collect()
     }
 
@@ -355,7 +384,7 @@ impl Db {
             game_columns("g")
         );
         let mut stmt = self.conn.prepare(&sql)?;
-        let game = stmt.query_row([], |row| row_to_game(row)).optional()?;
+        let game = stmt.query_row([], row_to_game).optional()?;
         Ok(game)
     }
 
@@ -416,6 +445,18 @@ impl Db {
     }
 }
 
+/// Escape the LIKE metacharacters so a search term is matched literally.
+fn escape_like(term: &str) -> String {
+    let mut out = String::with_capacity(term.len());
+    for c in term.chars() {
+        if matches!(c, '%' | '_' | '\\') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn game_columns(alias: &str) -> String {
     format!(
         "{alias}.id, {alias}.title, {alias}.system, {alias}.path, {alias}.hash, \
@@ -427,10 +468,7 @@ fn game_columns(alias: &str) -> String {
 }
 
 fn row_sql(where_clause: &str) -> String {
-    format!(
-        "SELECT {} FROM games g {where_clause}",
-        game_columns("g")
-    )
+    format!("SELECT {} FROM games g {where_clause}", game_columns("g"))
 }
 
 fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
@@ -467,7 +505,14 @@ mod tests {
     fn add_and_get_game() {
         let db = db();
         let id = db
-            .add_game("Sonic", "Genesis", Path::new("/lib/Genesis/Sonic/Sonic.md"), Some("abc"), Some(1024), "added")
+            .add_game(
+                "Sonic",
+                "Genesis",
+                Path::new("/lib/Genesis/Sonic/Sonic.md"),
+                Some("abc"),
+                Some(1024),
+                "added",
+            )
             .unwrap();
         let game = db.get_game(id).unwrap().unwrap();
         assert_eq!(game.title, "Sonic");
@@ -479,8 +524,12 @@ mod tests {
     fn duplicate_path_returns_existing() {
         let db = db();
         let path = Path::new("/lib/NES/Zelda/Zelda.nes");
-        let a = db.add_game("Zelda", "NES", path, Some("a"), None, "added").unwrap();
-        let b = db.add_game("Zelda", "NES", path, Some("a"), None, "added").unwrap();
+        let a = db
+            .add_game("Zelda", "NES", path, Some("a"), None, "added")
+            .unwrap();
+        let b = db
+            .add_game("Zelda", "NES", path, Some("a"), None, "added")
+            .unwrap();
         assert_eq!(a, b);
         assert_eq!(db.game_count().unwrap(), 1);
     }
@@ -488,9 +537,26 @@ mod tests {
     #[test]
     fn list_filters() {
         let db = db();
-        db.add_game("Sonic 1", "Genesis", Path::new("/g1"), Some("1"), None, "added").unwrap();
-        db.add_game("Sonic 2", "Genesis", Path::new("/g2"), Some("2"), None, "added").unwrap();
-        db.add_game("Zelda", "NES", Path::new("/g3"), Some("3"), None, "added").unwrap();
+        db.add_game(
+            "Sonic 1",
+            "Genesis",
+            Path::new("/g1"),
+            Some("1"),
+            None,
+            "added",
+        )
+        .unwrap();
+        db.add_game(
+            "Sonic 2",
+            "Genesis",
+            Path::new("/g2"),
+            Some("2"),
+            None,
+            "added",
+        )
+        .unwrap();
+        db.add_game("Zelda", "NES", Path::new("/g3"), Some("3"), None, "added")
+            .unwrap();
         assert_eq!(db.list_games("", None).unwrap().len(), 3);
         assert_eq!(db.list_games("sonic", None).unwrap().len(), 2);
         assert_eq!(db.list_games("", Some("NES")).unwrap().len(), 1);
@@ -499,7 +565,9 @@ mod tests {
     #[test]
     fn sessions_accumulate_playtime() {
         let db = db();
-        let id = db.add_game("Sonic", "Genesis", Path::new("/g1"), None, None, "added").unwrap();
+        let id = db
+            .add_game("Sonic", "Genesis", Path::new("/g1"), None, None, "added")
+            .unwrap();
         let s = db.start_session(id).unwrap();
         db.end_session(s).unwrap();
         let game = db.get_game(id).unwrap().unwrap();
@@ -511,9 +579,13 @@ mod tests {
     #[test]
     fn saves_and_continue() {
         let db = db();
-        let id = db.add_game("Sonic", "Genesis", Path::new("/g1"), None, None, "added").unwrap();
-        db.add_save(id, "battery", Path::new("/saves/1.srm")).unwrap();
-        db.add_save(id, "battery", Path::new("/saves/1.srm")).unwrap(); // dedup
+        let id = db
+            .add_game("Sonic", "Genesis", Path::new("/g1"), None, None, "added")
+            .unwrap();
+        db.add_save(id, "battery", Path::new("/saves/1.srm"))
+            .unwrap();
+        db.add_save(id, "battery", Path::new("/saves/1.srm"))
+            .unwrap(); // dedup
         assert_eq!(db.list_saves(id).unwrap().len(), 1);
         let cont = db.continue_game().unwrap().unwrap();
         assert_eq!(cont.id, id);
@@ -522,9 +594,34 @@ mod tests {
     #[test]
     fn bios_and_reports() {
         let db = db();
-        db.add_bios("psxonpsp660.bin", Path::new("/bios/psxonpsp660.bin"), "deadbeef").unwrap();
+        db.add_bios(
+            "psxonpsp660.bin",
+            Path::new("/bios/psxonpsp660.bin"),
+            "deadbeef",
+        )
+        .unwrap();
         db.add_report("{\"entries\":[]}").unwrap();
         assert_eq!(db.shelved_hashes().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn like_metacharacters_are_searched_for_literally() {
+        let db = db();
+        db.add_game(
+            "100% Orange Juice",
+            "DOS",
+            Path::new("/g1"),
+            None,
+            None,
+            "added",
+        )
+        .unwrap();
+        db.add_game("Zelda", "NES", Path::new("/g2"), None, None, "added")
+            .unwrap();
+        assert_eq!(db.list_games("100%", None).unwrap().len(), 1);
+        // A bare wildcard is a search for that character, not for everything.
+        assert_eq!(db.list_games("%", None).unwrap().len(), 1);
+        assert_eq!(db.list_games("_", None).unwrap().len(), 0);
     }
 
     #[test]
@@ -536,6 +633,8 @@ mod tests {
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
-        assert!(files.iter().any(|f| f.ends_with("-wal") || f.contains("wal") || f == "library.db"));
+        assert!(files
+            .iter()
+            .any(|f| f.ends_with("-wal") || f.contains("wal") || f == "library.db"));
     }
 }

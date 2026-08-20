@@ -113,6 +113,12 @@ const ICONS: Record<string, Shape[]> = {
 
 /** Build an SVG node for a named icon, or null if the name is unknown. */
 export function icon(name: string): SVGSVGElement | null {
+  // An own-property check, not a truthiness one: a name like "constructor"
+  // or "toString" reaches Object.prototype and would sail past `if (!shapes)`
+  // before failing on the loop below. The point of this function is that a
+  // name from anywhere is safe to hand it. Spelled the long way because the
+  // WebViews this ships inside predate `Object.hasOwn`.
+  if (!Object.prototype.hasOwnProperty.call(ICONS, name)) return null;
   const shapes = ICONS[name];
   if (!shapes) return null;
   const svg = document.createElementNS(SVG_NS, "svg");

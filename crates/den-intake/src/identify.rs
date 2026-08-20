@@ -30,8 +30,12 @@ pub enum FileKind {
 /// The result of identification: a kind and a best-guess system.
 #[derive(Debug, Clone, Copy)]
 pub struct Identification {
+    /// What sort of thing the file is.
     pub kind: FileKind,
+    /// The system it belongs to, when one could be named.
     pub system: Option<System>,
+    /// True when the answer came from a name or a header rather than a hash
+    /// match, which is the difference between `probable` and `added`.
     pub probable: bool,
 }
 
@@ -84,6 +88,20 @@ pub fn identify(path: &Path) -> std::io::Result<Identification> {
 }
 
 fn identify_by_extension(path: &Path, ext: &str) -> Identification {
+    // A BIOS is named before it is measured. Every bundled BIOS name ends in
+    // `.bin`, and `.bin` also belongs to Sega CD and PlayStation, so asking
+    // the extension first filed `scph1001.bin` as a PlayStation disc, wrote
+    // it a cue sheet, and shelved it as a game called "scph1001".
+    if crate::bios::BiosIndex::bundled()
+        .matches_name(path)
+        .is_some()
+    {
+        return Identification {
+            kind: FileKind::Bios,
+            system: None,
+            probable: true,
+        };
+    }
     if ext == "cue" {
         return Identification {
             kind: FileKind::Rider,
@@ -122,13 +140,6 @@ fn identify_by_extension(path: &Path, ext: &str) -> Identification {
             kind: FileKind::Rider,
             system: None,
             probable: false,
-        };
-    }
-    if crate::bios::BiosIndex::bundled().matches_name(path).is_some() {
-        return Identification {
-            kind: FileKind::Bios,
-            system: None,
-            probable: true,
         };
     }
     Identification {
@@ -170,6 +181,25 @@ mod tests {
         assert_eq!(id.kind, FileKind::Rom);
         assert_eq!(id.system, Some(System::Snes));
         assert!(id.probable);
+    }
+
+    #[test]
+    fn a_known_bios_name_beats_its_extension() {
+        // `.bin` belongs to Sega CD and PlayStation too; the name wins.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("scph1001.bin");
+        std::fs::write(&path, [0u8; 64]).unwrap();
+        let id = identify(&path).unwrap();
+        assert_eq!(id.kind, FileKind::Bios);
+        assert_eq!(id.system, None);
+    }
+
+    #[test]
+    fn an_ordinary_bin_is_still_a_disc() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Twisted Metal (USA).bin");
+        std::fs::write(&path, [0u8; 64]).unwrap();
+        assert_eq!(identify(&path).unwrap().kind, FileKind::Disc);
     }
 
     #[test]

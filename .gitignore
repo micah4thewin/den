@@ -1,14 +1,19 @@
 # Build artifacts
 target/
 **/target/
+
+# The lockfile is not committed: this workspace is a set of libraries plus a
+# shell that pins its own. Nothing here is a published binary whose exact
+# dependency graph has to be reproducible from the repository alone.
 Cargo.lock
 
-# Tauri artifacts
-src-tauri/target/
-src-tauri/icons/
-src-tauri/icons/icon-*.png
-src-tauri/icons/icon.icns
-src-tauri/icons/icon.ico
+# Node
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
 
 # OS
 .DS_Store
@@ -22,12 +27,5 @@ desktop.ini
 *.swo
 *~
 
-# Node
-node_modules/
-dist/
-
 # Logs
 *.log
-
-# Secrets
-src-tauri/tauri.conf.json

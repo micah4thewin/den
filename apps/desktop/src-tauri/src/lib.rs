@@ -18,8 +18,14 @@ struct AppState {
 
 type CommandResult<T> = Result<T, String>;
 
-fn with_den<T>(state: &tauri::State<'_, AppState>, f: impl FnOnce(&Den) -> CommandResult<T>) -> CommandResult<T> {
-    let den = state.den.lock().map_err(|_| "the library is busy".to_string())?;
+fn with_den<T>(
+    state: &tauri::State<'_, AppState>,
+    f: impl FnOnce(&Den) -> CommandResult<T>,
+) -> CommandResult<T> {
+    let den = state
+        .den
+        .lock()
+        .map_err(|_| "the library is busy".to_string())?;
     f(&den)
 }
 

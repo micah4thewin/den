@@ -4,25 +4,39 @@
 //! nothing else. No platform code, no state, so it builds headless and can
 //! be fuzzed against the corpus.
 
-
 /// The systems Den shelves games under, with the core the runner will pick
 /// by default. Names are the words the interface shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum System {
+    /// Nintendo Entertainment System / Famicom.
     Nes,
+    /// Super Nintendo Entertainment System / Super Famicom.
     Snes,
+    /// Sega Genesis / Mega Drive.
     Genesis,
+    /// Sega CD / Mega CD.
     SegaCd,
+    /// Sega 32X.
     Sega32x,
+    /// Nintendo 64.
     N64,
+    /// Sony PlayStation.
     Ps1,
+    /// Game Boy.
     Gb,
+    /// Game Boy Color.
     Gbc,
+    /// Game Boy Advance.
     Gba,
+    /// Arcade sets (FinalBurn Neo and friends), kept zipped.
     Arcade,
+    /// MS-DOS, run through DOSBox.
     Dos,
+    /// Sony PlayStation 2. Needs an external emulator profile.
     Ps2,
+    /// Nintendo GameCube. Needs an external emulator profile.
     Gamecube,
+    /// Nintendo Wii. Needs an external emulator profile.
     Wii,
 }
 
@@ -165,10 +179,7 @@ pub mod hash {
 
         #[test]
         fn sha1_of_empty_string_is_known() {
-            assert_eq!(
-                sha1_hex(b""),
-                "da39a3ee5e6b4b0d3255bfef95601890afd80709"
-            );
+            assert_eq!(sha1_hex(b""), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
         }
 
         #[test]
@@ -202,21 +213,45 @@ pub mod magic {
     /// The archive formats Den unpacks.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Archive {
+        /// A PKZIP container.
         Zip,
+        /// A 7-Zip container.
         SevenZ,
+        /// A RAR container (RAR4 or RAR5).
         Rar,
+        /// A gzip stream, usually wrapping a tar.
         Gzip,
+        /// A POSIX tar container.
         Tar,
     }
 
-    const HEAD: usize = 512;
+    /// The ISO9660 primary volume descriptor sits at 0x8000 on a 2048-byte
+    /// sector disc, so a head that stops short of it can never see one. Every
+    /// other signature lives in the first few bytes; this length is set by the
+    /// furthest one.
+    const ISO_MARKER: usize = 0x8001;
+    const HEAD: usize = ISO_MARKER + 5;
 
     /// Sniff the first bytes of a file.
     pub fn sniff(path: &Path) -> std::io::Result<Kind> {
         let mut file = fs::File::open(path)?;
         let mut head = vec![0u8; HEAD];
-        let n = std::io::Read::read(&mut file, &mut head)?;
-        head.truncate(n);
+        // One `read` returns what one syscall gave us, which for a large file
+        // is usually less than HEAD; read to the end of the buffer or the end
+        // of the file, whichever comes first.
+        let mut filled = 0;
+        loop {
+            match std::io::Read::read(&mut file, &mut head[filled..]) {
+                Ok(0) => break,
+                Ok(n) => filled += n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            }
+            if filled == head.len() {
+                break;
+            }
+        }
+        head.truncate(filled);
         Ok(kinds(&head))
     }
 
@@ -234,7 +269,7 @@ pub mod magic {
         if head.starts_with(&[0x1f, 0x8b]) {
             return Kind::Archive(Archive::Gzip);
         }
-        if head.len() > 262 && &head[257..262] == b"ustar" {
+        if head.len() >= 262 && &head[257..262] == b"ustar" {
             return Kind::Archive(Archive::Tar);
         }
         if head.starts_with(b"NES\x1a") {
@@ -248,7 +283,9 @@ pub mod magic {
             return Kind::Rom(System::N64);
         }
         // ISO9660: the volume descriptor sits at 0x8001 on a 2048-sector disc.
-        if head.len() > 0x8002 && &head[0x8001..0x8006] == b"CD001" {
+        // The bound has to cover the whole marker, not its first byte: a head
+        // that stops inside it used to slice past the end and panic.
+        if head.len() >= ISO_MARKER + 5 && &head[ISO_MARKER..ISO_MARKER + 5] == b"CD001" {
             return Kind::Iso9660;
         }
         if head.starts_with(b"MZ") {
@@ -274,12 +311,18 @@ pub mod magic {
         #[test]
         fn rar4_and_rar5() {
             assert_eq!(kinds(b"Rar!\x1a\x07\x00rest"), Kind::Archive(Archive::Rar));
-            assert_eq!(kinds(b"Rar!\x1a\x07\x01\x00rest"), Kind::Archive(Archive::Rar));
+            assert_eq!(
+                kinds(b"Rar!\x1a\x07\x01\x00rest"),
+                Kind::Archive(Archive::Rar)
+            );
         }
 
         #[test]
         fn gzip() {
-            assert_eq!(kinds(&[0x1f, 0x8b, 0x08, 0x00]), Kind::Archive(Archive::Gzip));
+            assert_eq!(
+                kinds(&[0x1f, 0x8b, 0x08, 0x00]),
+                Kind::Archive(Archive::Gzip)
+            );
         }
 
         #[test]
@@ -306,6 +349,36 @@ pub mod magic {
         }
 
         #[test]
+        fn head_that_stops_inside_the_iso_marker_does_not_panic() {
+            // Anything from 0x8003 to 0x8005 used to slice past the end.
+            for len in 0x8000..=0x8005 {
+                let mut head = vec![0u8; len];
+                if len > 0x8001 {
+                    head[0x8001] = b'C';
+                }
+                assert_eq!(kinds(&head), Kind::Unknown, "len {len:#x}");
+            }
+        }
+
+        #[test]
+        fn sniff_reads_far_enough_to_see_a_disc() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("disc.img");
+            let mut iso = vec![0u8; 0x9000];
+            iso[0x8001..0x8006].copy_from_slice(b"CD001");
+            std::fs::write(&path, &iso).unwrap();
+            assert_eq!(sniff(&path).unwrap(), Kind::Iso9660);
+        }
+
+        #[test]
+        fn sniff_of_a_short_file_is_still_classified() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("game.nes");
+            std::fs::write(&path, b"NES\x1a\x02\x01").unwrap();
+            assert_eq!(sniff(&path).unwrap(), Kind::Rom(System::Nes));
+        }
+
+        #[test]
         fn unknown() {
             assert_eq!(kinds(b"hello world"), Kind::Unknown);
         }
@@ -325,8 +398,11 @@ pub mod dat {
     /// One hash-to-name mapping from a database.
     #[derive(Debug, Clone, serde::Serialize)]
     pub struct Entry {
+        /// The SHA-1 of the file this entry names, as lowercase hex.
         pub sha1: String,
+        /// The exact title the database gives it.
         pub title: String,
+        /// The system label as the database spells it.
         pub system: String,
     }
 
@@ -458,7 +534,9 @@ pub mod dat {
         fn bundled_lookup() {
             let index = bundled();
             assert_eq!(index.len(), 3);
-            let entry = index.lookup("0000000000000000000000000000000000000000").unwrap();
+            let entry = index
+                .lookup("0000000000000000000000000000000000000000")
+                .unwrap();
             assert_eq!(entry.title, "Corpus Fixture (USA)");
             assert_eq!(System::from_extension("nes"), Some(System::Nes));
         }
@@ -476,7 +554,9 @@ pub mod dat {
             .unwrap();
             let index = Index::load_tsv(&path).unwrap();
             assert_eq!(index.len(), 2);
-            let entry = index.lookup("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap();
+            let entry = index
+                .lookup("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                .unwrap();
             assert_eq!(entry.title, "Sonic the Hedgehog (USA, Europe)");
             assert_eq!(Index::system_of(entry), Some(System::Genesis));
         }

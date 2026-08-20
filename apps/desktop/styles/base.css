@@ -83,6 +83,13 @@ a:hover { text-decoration-color: var(--text-1); }
 /* ---- utilities ------------------------------------------------------- */
 
 .hidden { display: none !important; }
+
+/* The `hidden` attribute is the platform's own way of saying "not now", and
+ * any component that sets its own `display` silently outranks the browser's
+ * one-word rule for it. Saying it here, once, with the weight the attribute
+ * was always meant to have, is cheaper than remembering per component. */
+[hidden] { display: none !important; }
+
 .spacer { flex: 1 1 auto; }
 
 .quiet {
@@ -250,6 +257,17 @@ button.ghost:hover:not(:disabled) {
 }
 
 button.ghost:active:not(:disabled) { box-shadow: var(--press-1); }
+
+/* A glyph inside a labelled control. An inline SVG with a viewBox and no
+ * intrinsic size lays out at zero in a flex row, so a button that prepends
+ * one gets a label and an invisible sibling unless it is sized here. In `em`,
+ * so the glyph tracks whatever size the control is set to. */
+button svg.icon,
+.btn svg.icon {
+  width: 1.05em;
+  height: 1.05em;
+  flex: 0 0 auto;
+}
 
 /* ---- icon buttons ---------------------------------------------------- */
 

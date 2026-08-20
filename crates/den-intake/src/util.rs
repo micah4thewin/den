@@ -29,12 +29,34 @@ pub fn sanitize(raw: &str) -> String {
         })
         .collect();
     let mut s = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
-    s.truncate(120);
+    // `String::truncate` panics unless the index lands on a character
+    // boundary, and a Japanese or accented title is very likely to put a
+    // multi-byte character across the 120th byte.
+    s.truncate(floor_char_boundary(&s, MAX_NAME));
+    let s = s.trim();
     if s.is_empty() {
         "unnamed".to_string()
     } else {
-        s.trim().to_string()
+        s.to_string()
     }
+}
+
+/// The longest name Den will write, in bytes. Comfortably inside the 255-byte
+/// limit every filesystem Den targets imposes on one path component, with room
+/// left for the extension and a `_variants` prefix.
+const MAX_NAME: usize = 120;
+
+/// The largest index `<= max` that is a character boundary in `s`.
+/// (`str::floor_char_boundary` is still unstable.)
+fn floor_char_boundary(s: &str, max: usize) -> usize {
+    if max >= s.len() {
+        return s.len();
+    }
+    let mut i = max;
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
 }
 
 /// A display-friendly game title from a raw filename: underscores to spaces,
@@ -92,6 +114,25 @@ mod tests {
             "Final Fantasy VII"
         );
         assert_eq!(clean_title("Zelda"), "Zelda");
+    }
+
+    #[test]
+    fn sanitize_truncates_on_a_character_boundary() {
+        // 119 ASCII bytes then a two-byte character straddling byte 120.
+        let raw = format!("{}\u{00e9}{}", "a".repeat(119), "b".repeat(40));
+        let out = sanitize(&raw);
+        assert!(out.len() <= MAX_NAME);
+        assert_eq!(out, "a".repeat(119));
+
+        // A name made entirely of multi-byte characters still truncates.
+        let wide = "\u{65e5}".repeat(200);
+        assert!(sanitize(&wide).len() <= MAX_NAME);
+    }
+
+    #[test]
+    fn sanitize_of_only_illegal_characters_is_named() {
+        assert_eq!(sanitize("///"), "unnamed");
+        assert_eq!(sanitize("   "), "unnamed");
     }
 
     #[test]

@@ -19,15 +19,19 @@ use std::process::Command;
 /// One archive that could not be unpacked, with a human reason.
 #[derive(Debug, Clone)]
 pub struct UnpackFailure {
+    /// The archive that could not be opened or read.
     pub path: PathBuf,
+    /// Why, in words a report card can print.
     pub reason: String,
 }
 
 /// An error surfaced by a single unpack step.
 #[derive(Debug, thiserror::Error)]
 pub enum UnpackError {
+    /// The archive is encrypted and no working password was given.
     #[error("archive is password protected")]
     PasswordProtected,
+    /// Anything else the format or the filesystem said.
     #[error("{0}")]
     Other(String),
 }
@@ -54,8 +58,14 @@ pub fn unpack_recursive(
         let Ok(entries) = fs::read_dir(&dir) else {
             continue;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
+        // Read the whole directory before unpacking anything into it.
+        // Unpacking creates a sibling directory, and a `ReadDir` that is still
+        // open over the same directory may or may not hand that new entry
+        // back depending on the filesystem -- which would queue it twice and
+        // shelve everything inside it twice.
+        let mut children: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+        children.sort();
+        for path in children {
             if path.is_dir() {
                 queue.push(path);
                 continue;
@@ -84,6 +94,7 @@ pub fn unpack_recursive(
     }
 
     leaves.sort();
+    leaves.dedup();
     (leaves, failures)
 }
 
@@ -219,8 +230,20 @@ fn unpack_rar(src: &Path, dest: &Path, password: Option<&str>) -> Result<(), Unp
             cmd.arg("-p-"); // empty password, never prompt
         }
     }
-    cmd.arg(src).arg(dest);
-    let output = cmd.output().map_err(UnpackError::other)?;
+    // unrar reads a final argument without a trailing separator as a file
+    // mask, not a destination, and then extracts nothing at all.
+    let mut dest_arg = dest.as_os_str().to_os_string();
+    dest_arg.push(std::path::MAIN_SEPARATOR_STR);
+    cmd.arg(src).arg(dest_arg);
+    let output = match cmd.output() {
+        Ok(o) => o,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(UnpackError::Other(
+                "RAR needs the system `unrar` tool, which is not installed".to_string(),
+            ))
+        }
+        Err(e) => return Err(UnpackError::other(e)),
+    };
     if output.status.success() {
         return Ok(());
     }
@@ -250,7 +273,11 @@ fn unpack_gzip(src: &Path, dest: &Path) -> Result<(), UnpackError> {
     if name.is_empty() || name == "unnamed" {
         name = "file".to_string();
     }
-    let out_path = dest.join(&name);
+    // The name comes off the archive's own filename, so it is already ours,
+    // but it goes through the same gate every other entry does.
+    let Some(out_path) = safe_join(dest, &name) else {
+        return Err(UnpackError::Other("unsafe entry name".to_string()));
+    };
     if let Some(parent) = out_path.parent() {
         fs::create_dir_all(parent).map_err(UnpackError::other)?;
     }
@@ -261,9 +288,7 @@ fn unpack_gzip(src: &Path, dest: &Path) -> Result<(), UnpackError> {
 
 fn looks_like_password(s: &str) -> bool {
     let lower = s.to_ascii_lowercase();
-    lower.contains("password")
-        || lower.contains("encrypted")
-        || lower.contains("invalidpassword")
+    lower.contains("password") || lower.contains("encrypted") || lower.contains("invalidpassword")
 }
 
 /// Decide whether an extension denotes a disc image (as opposed to a cart).
@@ -278,8 +303,25 @@ pub fn is_disc_ext(ext: &str) -> bool {
 pub fn is_rider_ext(ext: &str) -> bool {
     matches!(
         ext,
-        "txt" | "pdf" | "doc" | "docx" | "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp"
-            | "nfo" | "md" | "html" | "htm" | "rtf" | "epub" | "srt" | "sub" | "chm"
+        "txt"
+            | "pdf"
+            | "doc"
+            | "docx"
+            | "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "bmp"
+            | "nfo"
+            | "md"
+            | "html"
+            | "htm"
+            | "rtf"
+            | "epub"
+            | "srt"
+            | "sub"
+            | "chm"
     )
 }
 

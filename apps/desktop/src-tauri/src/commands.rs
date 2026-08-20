@@ -36,6 +36,10 @@ pub(crate) struct GameView {
 #[tauri::command]
 pub(crate) fn get_library(state: State<'_, AppState>) -> CommandResult<LibraryView> {
     with_den(&state, |den| {
+        // Any emulator that has quit since the last look closes its session
+        // here, so playtime and the Continue row are current by the time the
+        // screen is drawn.
+        den.reap();
         let games = den.db().list_games("", None).map_err(|e| e.to_string())?;
         let systems = den
             .db()
@@ -60,7 +64,12 @@ pub(crate) fn get_library(state: State<'_, AppState>) -> CommandResult<LibraryVi
 #[tauri::command]
 pub(crate) fn get_game(state: State<'_, AppState>, id: i64) -> CommandResult<GameView> {
     with_den(&state, |den| {
-        let game = den.db().get_game(id).map_err(|e| e.to_string())?.ok_or("game not found")?;
+        den.reap();
+        let game = den
+            .db()
+            .get_game(id)
+            .map_err(|e| e.to_string())?
+            .ok_or("game not found")?;
         let saves = den.db().list_saves(id).map_err(|e| e.to_string())?;
         Ok(GameView { game, saves })
     })
@@ -78,7 +87,8 @@ pub(crate) fn run_intake(
     password: Option<String>,
 ) -> CommandResult<Report> {
     with_den(&state, |den| {
-        den.intake(Path::new(&folder), password).map_err(|e| e.to_string())
+        den.intake(Path::new(&folder), password)
+            .map_err(|e| e.to_string())
     })
 }
 
@@ -115,10 +125,17 @@ fn open_in_file_manager(path: &str) -> CommandResult<()> {
     #[cfg(all(unix, not(target_os = "macos")))]
     let mut cmd = std::process::Command::new("xdg-open");
 
-    #[cfg(any(target_os = "macos", target_os = "windows", all(unix, not(target_os = "macos"))))]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        all(unix, not(target_os = "macos"))
+    ))]
     {
+        // `spawn`, not `status`: a file manager that stays in the foreground
+        // would otherwise hold the command -- and the library lock with it --
+        // for as long as the window is open.
         cmd.arg(path);
-        cmd.status().map_err(|e| e.to_string())?;
+        cmd.spawn().map_err(|e| e.to_string())?;
     }
     Ok(())
 }

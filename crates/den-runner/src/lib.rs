@@ -10,27 +10,36 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 
+/// Why a launch did not happen.
 #[derive(Debug, thiserror::Error)]
 pub enum RunnerError {
+    /// No RetroArch binary was found to launch.
     #[error("RetroArch binary not found on PATH")]
     NotFound,
+    /// The filesystem or the spawn said no.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// Anything else worth a sentence.
     #[error("{0}")]
     Other(String),
 }
 
 /// Where RetroArch lives and where Den keeps session state.
 pub struct Runner {
+    /// The RetroArch binary this runner will launch.
     pub retroarch: PathBuf,
+    /// Where the private per-session configs are written.
     pub config_dir: PathBuf,
+    /// Where RetroArch is pointed for battery saves.
     pub save_dir: PathBuf,
+    /// Where RetroArch is pointed for save states.
     pub state_dir: PathBuf,
 }
 
 /// A launched RetroArch process, owned here.
 pub struct Running {
     child: Child,
+    /// The private config this process was launched with.
     pub config_path: PathBuf,
 }
 
@@ -95,10 +104,7 @@ impl Runner {
         cmd.arg("--fullscreen");
         cmd.arg(&game.path);
         let child = cmd.spawn().map_err(RunnerError::Io)?;
-        Ok(Running {
-            child,
-            config_path,
-        })
+        Ok(Running { child, config_path })
     }
 }
 
@@ -120,16 +126,20 @@ fn write_config(path: &Path, save_dir: &Path, state_dir: &Path) -> std::io::Resu
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {
+    // An explicit RETROARCH wins, absolute or not: `available()` only trusts
+    // an absolute path, so a relative override is resolved here rather than
+    // silently reported as missing.
     if let Ok(p) = std::env::var("RETROARCH") {
         if !p.is_empty() {
-            return Some(PathBuf::from(p));
+            let path = PathBuf::from(p);
+            return Some(fs::canonicalize(&path).unwrap_or(path));
         }
     }
     let path = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&path) {
         let candidate = dir.join(name);
         if candidate.is_file() {
-            return Some(candidate);
+            return Some(fs::canonicalize(&candidate).unwrap_or(candidate));
         }
     }
     None
@@ -149,8 +159,34 @@ mod tests {
         assert!(text.contains("savestate_auto_save_interval"));
     }
 
+    // `RETROARCH` is process-global, so everything that reads it lives in one
+    // test rather than racing another thread that set it.
     #[test]
-    fn missing_binary_is_not_found() {
+    fn binary_lookup() {
+        assert!(std::env::var_os("RETROARCH").is_none());
         assert!(find_on_path("definitely-not-a-real-binary-xyz").is_none());
+
+        let dir = tempfile::tempdir().unwrap();
+        let fake = dir.path().join("retroarch");
+        std::fs::write(&fake, b"#!/bin/sh\nexit 0\n").unwrap();
+        let relative = pathdiff(&fake);
+        // SAFETY-adjacent: these two tests are the only readers of the var,
+        // and this one restores it before returning.
+        std::env::set_var("RETROARCH", &relative);
+        let found = find_on_path("retroarch");
+        std::env::remove_var("RETROARCH");
+        let found = found.expect("an explicit override is always found");
+        assert!(found.is_absolute(), "{found:?} should have been resolved");
+        assert!(found.is_file());
+    }
+
+    /// The path to `target`, expressed relative to the current directory when
+    /// that is possible and left absolute when it is not.
+    fn pathdiff(target: &Path) -> PathBuf {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        target
+            .strip_prefix(&cwd)
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|_| target.to_path_buf())
     }
 }
