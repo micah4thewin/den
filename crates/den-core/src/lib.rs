@@ -7,7 +7,7 @@ use den_ident::System;
 pub use den_input::ControllerInfo;
 use den_intake::IntakeOptions;
 pub use den_intake::Report;
-use den_runner::{Runner, Running};
+use den_runner::{PlayerBinding, Runner, Running};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -72,6 +72,44 @@ pub struct RetroArchStatus {
     pub runtime_dir: String,
 }
 
+/// One line of the keyboard scheme, as the interface shows it.
+#[derive(Debug, Serialize)]
+pub struct KeyBinding {
+    /// What it does, in the words a person uses.
+    pub action: String,
+    /// The key that does it.
+    pub key: String,
+}
+
+/// The word for a controller button, rather than its RetroArch key.
+fn button_label(button: &str) -> String {
+    match button {
+        "up" | "down" | "left" | "right" => {
+            let mut c = button.chars();
+            let first = c.next().map(|f| f.to_ascii_uppercase());
+            format!("D-pad {}{}", first.unwrap_or('?'), c.as_str())
+        }
+        "a" | "b" | "x" | "y" => format!("{} button", button.to_ascii_uppercase()),
+        "l" | "r" => format!("{} shoulder", button.to_ascii_uppercase()),
+        "start" => "Start".to_string(),
+        "select" => "Select".to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// The word for one of RetroArch's own actions.
+fn chrome_label(setting: &str) -> String {
+    match setting {
+        "input_menu_toggle" => "RetroArch menu",
+        "input_exit_emulator" => "Quit back to Den",
+        "input_save_state" => "Save state",
+        "input_load_state" => "Load state",
+        "input_toggle_fullscreen" => "Windowed / fullscreen",
+        other => other,
+    }
+    .to_string()
+}
+
 /// What Den knows about the libretro core a game needs.
 #[derive(Debug, Serialize)]
 pub struct CoreStatus {
@@ -89,6 +127,20 @@ pub struct CoreStatus {
 
 /// The library setting holding a RetroArch picked by hand.
 const RETROARCH_SETTING: &str = "retroarch_path";
+
+/// The prefix under which a pad's player number is kept.
+const PAD_SETTING: &str = "pad_player:";
+
+/// What is written down for a pad somebody deliberately gave to nobody.
+///
+/// Distinct from having no setting at all, which means "never seen, decide
+/// for it". Without the difference, "Nobody" is a button that does nothing:
+/// the next look at the controllers finds a pad with no player and helpfully
+/// gives it one back.
+const PAD_NOBODY: &str = "none";
+
+/// How many players RetroArch is configured for.
+pub const MAX_PLAYERS: usize = 4;
 
 /// One launched emulator and the session row that is open for it.
 struct Live {
@@ -180,7 +232,10 @@ impl Den {
         }
         let core = core_for(&game);
         self.reap();
-        let process = self.runner.launch(&game, &core)?;
+        // The pads as they stand right now, so a controller plugged in while
+        // Den was open is player one by the time the game starts.
+        let players = self.player_bindings();
+        let process = self.runner.launch(&game, &core, &players)?;
         let pid = process.pid();
         // A launch that is not written down is a launch the library forgets:
         // playtime, Recent, and the Continue row are all read back out of the
@@ -234,9 +289,124 @@ impl Den {
         self.live.lock().map(|live| live.len()).unwrap_or(0)
     }
 
-    /// Controllers currently attached.
+    /// Controllers currently attached, each with the player it answers for.
+    ///
+    /// A pad nobody has assigned takes the lowest free player, and that
+    /// sticks. Plugging a controller in and having it be Player 1 is the
+    /// whole of what most people want; making them say so first is a step
+    /// that exists only because the software could not decide.
     pub fn controllers(&self) -> Vec<ControllerInfo> {
-        self.input.controllers()
+        let mut pads = self.input.controllers();
+        let mut taken: Vec<usize> = Vec::new();
+
+        // Assignments somebody made stand, and claim their number first.
+        let mut spoken_for: Vec<bool> = Vec::with_capacity(pads.len());
+        for pad in pads.iter_mut() {
+            let setting = self.db.setting(&pad_key(&pad.identity)).ok().flatten();
+            let deliberate = setting.as_deref() == Some(PAD_NOBODY);
+            if let Some(player) = setting.as_deref().and_then(|v| v.parse::<usize>().ok()) {
+                if (1..=MAX_PLAYERS).contains(&player) && !taken.contains(&player) {
+                    pad.player = Some(player);
+                    taken.push(player);
+                }
+            }
+            spoken_for.push(deliberate);
+        }
+
+        // Everything else takes the lowest free number, in joystick order --
+        // except a pad somebody said belongs to nobody, which stays that way.
+        for (pad, deliberate) in pads.iter_mut().zip(spoken_for) {
+            if pad.player.is_some() || deliberate {
+                continue;
+            }
+            let Some(free) = (1..=MAX_PLAYERS).find(|n| !taken.contains(n)) else {
+                break; // more pads than players; the rest stay unassigned
+            };
+            pad.player = Some(free);
+            taken.push(free);
+            // Written down, so it is the same pad's number next time even if
+            // the order they enumerate in changes.
+            let _ = self
+                .db
+                .set_setting(&pad_key(&pad.identity), Some(&free.to_string()));
+        }
+        pads
+    }
+
+    /// The pad-to-player mapping a launch should be told about.
+    fn player_bindings(&self) -> Vec<PlayerBinding> {
+        self.controllers()
+            .into_iter()
+            .filter_map(|pad| {
+                Some(PlayerBinding {
+                    player: pad.player?,
+                    joypad_index: pad.index,
+                })
+            })
+            .collect()
+    }
+
+    /// How Den's keyboard scheme reads, for the interface to show.
+    ///
+    /// Taken from the same table the config is written from, so what is on
+    /// screen is what the keys do.
+    pub fn keyboard_scheme(&self) -> Vec<KeyBinding> {
+        den_runner::KEYBOARD_SCHEME
+            .iter()
+            .map(|(button, _key, shown)| KeyBinding {
+                action: button_label(button),
+                key: shown.to_string(),
+            })
+            .chain(
+                den_runner::KEYBOARD_CHROME
+                    .iter()
+                    .map(|(setting, _key, shown)| KeyBinding {
+                        action: chrome_label(setting),
+                        key: shown.to_string(),
+                    }),
+            )
+            .collect()
+    }
+
+    /// Assign a pad to a player, or to nobody with `None`.
+    ///
+    /// Assigning a player that another pad holds swaps them, rather than
+    /// leaving two pads claiming one player and one of them silently losing.
+    pub fn assign_pad(&self, identity: &str, player: Option<usize>) -> Result<(), Error> {
+        if let Some(player) = player {
+            if !(1..=MAX_PLAYERS).contains(&player) {
+                return Err(Error::Unusable(format!(
+                    "there is no player {player}; Den drives {MAX_PLAYERS}"
+                )));
+            }
+            let mine = self
+                .db
+                .setting(&pad_key(identity))?
+                .and_then(|v| v.parse::<usize>().ok());
+            for pad in self.input.controllers() {
+                if pad.identity == identity {
+                    continue;
+                }
+                let theirs = self
+                    .db
+                    .setting(&pad_key(&pad.identity))?
+                    .and_then(|v| v.parse::<usize>().ok());
+                if theirs == Some(player) {
+                    // Hand them the number this pad is giving up. Without a
+                    // number of its own to give, they become unassigned.
+                    let swap = mine.map(|p| p.to_string());
+                    self.db
+                        .set_setting(&pad_key(&pad.identity), swap.as_deref())?;
+                }
+            }
+            self.db
+                .set_setting(&pad_key(identity), Some(&player.to_string()))?;
+        } else {
+            // Written down rather than cleared: a cleared setting reads as
+            // "never seen", and the next look would assign it again.
+            self.db.set_setting(&pad_key(identity), Some(PAD_NOBODY))?;
+        }
+        Ok(())
     }
 
     /// Whether RetroArch is available to launch.
@@ -391,6 +561,10 @@ fn core_for(game: &Game) -> String {
             .map(|s| s.default_core().to_string())
             .unwrap_or_default()
     })
+}
+
+fn pad_key(identity: &str) -> String {
+    format!("{PAD_SETTING}{identity}")
 }
 
 fn load_dat(library: &Path) -> Index {

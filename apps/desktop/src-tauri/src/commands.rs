@@ -3,7 +3,9 @@
 //! filesystem directly; it asks Den, which owns the library.
 
 use crate::{with_den, AppState, CommandResult};
-use den_core::{ControllerInfo, CoreStatus, Game, LaunchInfo, Report, RetroArchStatus, Save};
+use den_core::{
+    ControllerInfo, CoreStatus, Game, KeyBinding, LaunchInfo, Report, RetroArchStatus, Save,
+};
 use serde::Serialize;
 use std::path::Path;
 use tauri::State;
@@ -103,9 +105,44 @@ pub(crate) fn run_intake(
     })
 }
 
+/// Everything the Controllers screen needs in one call.
+#[derive(Serialize)]
+pub(crate) struct ControllerView {
+    pub(crate) pads: Vec<ControllerInfo>,
+    /// Den's keyboard scheme, read from the same table the config is written
+    /// from, so the screen cannot promise a key the game does not answer to.
+    pub(crate) keyboard: Vec<KeyBinding>,
+    /// How many players Den configures.
+    pub(crate) players: usize,
+}
+
 #[tauri::command]
-pub(crate) fn list_controllers(state: State<'_, AppState>) -> CommandResult<Vec<ControllerInfo>> {
-    with_den(&state, |den| Ok(den.controllers()))
+pub(crate) fn list_controllers(state: State<'_, AppState>) -> CommandResult<ControllerView> {
+    with_den(&state, |den| {
+        Ok(ControllerView {
+            pads: den.controllers(),
+            keyboard: den.keyboard_scheme(),
+            players: den_core::MAX_PLAYERS,
+        })
+    })
+}
+
+/// Give a pad to a player, or take it away from all of them.
+#[tauri::command]
+pub(crate) fn assign_pad(
+    state: State<'_, AppState>,
+    identity: String,
+    player: Option<usize>,
+) -> CommandResult<ControllerView> {
+    with_den(&state, |den| {
+        den.assign_pad(&identity, player)
+            .map_err(|e| e.to_string())?;
+        Ok(ControllerView {
+            pads: den.controllers(),
+            keyboard: den.keyboard_scheme(),
+            players: den_core::MAX_PLAYERS,
+        })
+    })
 }
 
 #[tauri::command]

@@ -68,6 +68,7 @@ pub fn run() {
             commands::open_library_folder,
             commands::choose_retroarch,
             commands::clear_retroarch,
+            commands::assign_pad,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Den shell");

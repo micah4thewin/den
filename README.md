@@ -50,7 +50,7 @@ machine and in CI without dragging platform GUI dependencies in.
 The core workspace needs nothing but a Rust toolchain:
 
 ```sh
-cargo test --workspace          # 81 tests, headless
+cargo test --workspace          # 94 tests, headless
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 ```
@@ -133,6 +133,29 @@ staged and under what licence, so the question is at least visible.
 **Cores are downloaded by RetroArch**, not by Den — Online Updater → Core
 Downloader. `--from-system` copies the ones you already have; `den-doctor`
 lists which of Den's defaults are present.
+
+## Controls
+
+A gamepad you plug in is **Player 1** by the time you look at it — Den asks
+the kernel what the device is rather than matching its name, assigns the
+lowest free player, and remembers that pad by vendor, product and name so it
+keeps its number when you unplug it and bring it back. The Controllers screen
+changes any of it; giving a player to a pad that already has one swaps them.
+
+There is always a keyboard, whether or not a pad turned up:
+
+| | | | | |
+| --- | --- | --- | --- | --- |
+| D-pad | arrow keys | | Start | <kbd>Enter</kbd> |
+| B / A | <kbd>Z</kbd> <kbd>X</kbd> | | Select | <kbd>Right Shift</kbd> |
+| Y / X | <kbd>A</kbd> <kbd>S</kbd> | | RetroArch menu | <kbd>F1</kbd> |
+| L / R | <kbd>Q</kbd> <kbd>W</kbd> | | Quit back to Den | <kbd>Esc</kbd> |
+| Save / load state | <kbd>F2</kbd> <kbd>F4</kbd> | | Fullscreen | <kbd>F11</kbd> |
+
+Den writes these into the config it hands RetroArch and shows the same table
+on the Controllers screen, both from one table in `den-runner`, so what is on
+screen is what the keys do. Everything else in your RetroArch configuration
+is inherited untouched.
 
 ## Running it
 

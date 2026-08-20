@@ -27,6 +27,21 @@ the build plan's milestones, not semver.
 - `apps/desktop/` — Tauri v2 shell scaffold: design-system port (tokens, base,
   animations, six Gilroy/Avenir faces, `createElementNS` icon table, brand
   mark), and the four screens (Library, Game, Intake, Controllers) in HTML/CSS.
+- **A keyboard scheme, written and shown from one table.** Den binds player
+  one's keys in every session config and lists them on the Controllers screen
+  from the same source, so the screen cannot promise a key the game does not
+  answer to. Arrow keys, `Z`/`X`/`A`/`S` for the face buttons in the shape
+  they sit on a pad, `Enter` and `Right Shift`, and `Escape` to get back to
+  Den. It means there is a way to play before any controller is involved.
+- **Pads are remembered by what they are**, not by which node they turned up
+  as: vendor, product and reported name, so unplugging a pad and bringing it
+  back keeps its player. Two identical pads get separate identities, in
+  joystick order, so a pair of the same controller do not share one number.
+- "Nobody" is a real answer for a pad, kept apart from "never seen" — without
+  that difference it would be a control that does nothing, since the next look
+  at the controllers would helpfully assign the pad again.
+- `den-doctor` reports each pad's player and identity, and prints the keyboard
+  scheme.
 - **A RetroArch can be bundled inside Den.** `tools/bundle_runtime.py` stages
   one into `apps/desktop/src-tauri/resources/runtime/`, which the Tauri bundle
   ships and the shell hands to the runner as the first place it looks. Three
@@ -63,6 +78,17 @@ the build plan's milestones, not semver.
   and for the glue object and its sessions (`crates/den-core/tests`).
 
 ### Fixed
+- **A gamepad was detected and then nothing happened to it.** `player` was
+  hard-coded `None`, the Controllers screen printed "Unassigned" with no
+  control beside it, and no pad was ever mentioned to RetroArch at all. A pad
+  is now Player 1 by the time you look at it, the screen changes that, and the
+  assignment reaches RetroArch as `input_playerN_joypad_index`.
+- **Detection asked what a device was called, not what it is.** The keyword
+  list missed the one every Linux machine has: the kernel calls an Xbox pad
+  `Microsoft X-Box 360 pad`, and `x-box` is not `xbox`. Den now takes the
+  kernel's own answer — a `js` node, or `BTN_GAMEPAD` in the capability
+  bitmask, which is what udev looks at — and reports pads in joystick order,
+  which is the order RetroArch counts them in.
 - **The runtime bundler put the binary where Den never looks.** Published
   builds unpack into a wrapper directory, and the staging directory has a
   committed README in it, so the "lift the wrapper if it is the only entry"
@@ -238,7 +264,7 @@ the build plan's milestones, not semver.
   committed `__pycache__`.
 
 ### Verified
-- `cargo test --workspace` green: 81 tests across the seven crates.
+- `cargo test --workspace` green: 94 tests across the seven crates.
 - `cargo clippy --workspace --all-targets -- -D warnings` and
   `cargo fmt --all --check` clean.
 - `npm run build` (types and bundle) clean, with no unresolved assets.

@@ -125,10 +125,20 @@ fn main() {
     println!("\nControllers");
     let pads = den.controllers();
     if pads.is_empty() {
-        println!("  none detected");
+        println!("  none detected — the keyboard scheme below is the way in");
     }
-    for pad in pads {
-        println!("  {:<12} {}", pad.id, pad.name);
+    for pad in &pads {
+        let player = pad
+            .player
+            .map(|p| format!("Player {p}"))
+            .unwrap_or_else(|| "nobody".to_string());
+        println!("  {:<6} {:<10} {}", pad.id, player, pad.name);
+        println!("         {}", pad.identity);
+    }
+
+    println!("\nKeyboard (player one)");
+    for binding in den.keyboard_scheme() {
+        println!("  {:<24} {}", binding.action, binding.key);
     }
 
     if !status.available {

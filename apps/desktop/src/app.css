@@ -464,7 +464,54 @@
 
 .pad-card .pad-name { font-weight: var(--w-bold); }
 
-.pad-card .pad-player { font-size: 0.8rem; color: var(--text-2); }
+/* Which player a pad answers for: a choice, so it looks like one. */
+.pad-assign {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-3);
+}
+
+.pad-assign label {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.pad-assign select { width: auto; flex: 1 1 auto; }
+
+/* The keyboard is a card like a pad is, because to somebody deciding how to
+ * play it is the same kind of thing: a way to hold the game. */
+.keyboard-card { grid-column: 1 / -1; }
+
+.keymap {
+  display: grid;
+  /* Pairs: what it does, then the key. Several pairs across when there is
+   * room, so the whole scheme is one glance rather than a scroll. */
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--gap-1) var(--gap-5);
+  margin: var(--gap-2) 0 0;
+}
+
+.keymap > div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap-2);
+  font-size: 0.82rem;
+}
+
+.keymap dt {
+  color: var(--text-2);
+  margin: 0;
+}
+
+/* The gap between the action and its key is drawn rather than left to the
+ * eye, the way a table of contents does it. */
+.keymap .lead {
+  flex: 1 1 auto;
+  border-bottom: 1px dotted var(--edge);
+  transform: translateY(-0.2em);
+}
+
+.keymap dd { margin: 0; }
 
 /* A press-to-test pip: sunken by default, pressed in when the pad speaks. */
 .pips {
