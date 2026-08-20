@@ -47,6 +47,22 @@ pub struct LaunchInfo {
     pub content: String,
 }
 
+/// What Den knows about RetroArch right now, in the shape the interface
+/// needs to say it: whether there is one, where it is, and -- when there is
+/// not -- everywhere Den looked, so the answer is actionable rather than just
+/// discouraging.
+#[derive(Debug, Serialize)]
+pub struct RetroArchStatus {
+    /// Whether a RetroArch can be launched.
+    pub available: bool,
+    /// The binary Den would launch, when there is one.
+    pub path: Option<String>,
+    /// The reason there is not one, in a sentence.
+    pub problem: Option<String>,
+    /// Every place Den looked, in the order it looked.
+    pub searched: Vec<String>,
+}
+
 /// One launched emulator and the session row that is open for it.
 struct Live {
     session_id: i64,
@@ -195,6 +211,30 @@ impl Den {
     /// Whether RetroArch is available to launch.
     pub fn retroarch_available(&self) -> bool {
         self.runner.available()
+    }
+
+    /// Where RetroArch is, or where Den looked for it and came up empty.
+    pub fn retroarch_status(&self) -> RetroArchStatus {
+        let searched = self
+            .runner
+            .searched()
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
+        match self.runner.locate() {
+            Ok(path) => RetroArchStatus {
+                available: true,
+                path: Some(path.display().to_string()),
+                problem: None,
+                searched,
+            },
+            Err(e) => RetroArchStatus {
+                available: false,
+                path: None,
+                problem: Some(e.to_string()),
+                searched,
+            },
+        }
     }
 }
 

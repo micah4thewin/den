@@ -121,6 +121,50 @@
 
 .screen-head .spacer { flex: 1 1 auto; }
 
+/* A standing notice: something about this machine, not about one action, so
+ * it is a sunken well you read rather than a control you press. Words and
+ * depth carry it -- there is no colour to spend on a warning. */
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  padding: var(--gap-4);
+  border-radius: var(--r-3);
+  background: var(--sunken);
+  box-shadow: var(--press-1);
+}
+
+.notice .notice-word {
+  font-weight: var(--w-bold);
+  font-size: 0.9rem;
+}
+
+.notice-where summary {
+  font-size: 0.82rem;
+  color: var(--text-2);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.notice-where summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--r-1);
+}
+
+.notice-where .extra-list {
+  margin-top: var(--gap-2);
+  gap: 0;
+  word-break: break-all;
+}
+
+.notice-where .extra-list li {
+  font-size: 0.76rem;
+  color: var(--text-3);
+}
+
+.play-row .play-note { align-self: center; }
+
 /* ---- library ------------------------------------------------------------ */
 
 .row-band { display: flex; flex-direction: column; gap: var(--gap-3); }

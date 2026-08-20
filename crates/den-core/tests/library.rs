@@ -35,30 +35,6 @@ fn intake_shelves_into_the_library_and_the_database() {
 }
 
 #[test]
-fn launching_without_retroarch_says_so_rather_than_hanging() {
-    let tmp = tempfile::tempdir().unwrap();
-    let drop = tmp.path().join("downloads");
-    fs::create_dir_all(&drop).unwrap();
-    fs::write(drop.join("Zelda (USA).nes"), b"NES\x1a\x02\x01\x01\x00rom").unwrap();
-
-    let den = Den::open(&tmp.path().join("den")).unwrap();
-    den.intake(&drop, None).unwrap();
-    let game = den.db().list_games("", None).unwrap().remove(0);
-
-    if den.retroarch_available() {
-        // On a machine that has it, the launch is real: reap it again.
-        den.launch(game.id).unwrap();
-        assert_eq!(den.db().recent_games(4).unwrap().len(), 1);
-        return;
-    }
-    let err = den.launch(game.id).unwrap_err().to_string();
-    assert!(err.contains("RetroArch"), "unhelpful message: {err}");
-    // A refused launch is not a session.
-    assert_eq!(den.running_count(), 0);
-    assert!(den.db().recent_games(4).unwrap().is_empty());
-}
-
-#[test]
 fn launching_a_missing_game_is_an_error_not_a_panic() {
     let tmp = tempfile::tempdir().unwrap();
     let den = Den::open(&tmp.path().join("den")).unwrap();

@@ -39,18 +39,26 @@ interface SystemRow {
   count: number;
 }
 
+interface RetroArchStatus {
+  available: boolean;
+  path: string | null;
+  problem: string | null;
+  searched: string[];
+}
+
 interface LibraryView {
   path: string;
   games: Game[];
   systems: SystemRow[];
   continue_game: Game | null;
   recent: Game[];
-  retroarch: boolean;
+  retroarch: RetroArchStatus;
 }
 
 interface GameView {
   game: Game;
   saves: Save[];
+  retroarch: RetroArchStatus;
 }
 
 interface Outcome {
@@ -121,6 +129,8 @@ async function renderLibrary(): Promise<void> {
   $<HTMLElement>("game-count").textContent =
     data.games.length === 1 ? "1 game" : `${data.games.length} games`;
 
+  renderRetroArchNotice(data.retroarch);
+
   const continueBand = $<HTMLElement>("continue-band");
   const continueShelf = $<HTMLElement>("continue-shelf");
   continueShelf.replaceChildren();
@@ -143,6 +153,32 @@ async function renderLibrary(): Promise<void> {
   }
 
   renderShelves(data);
+}
+
+/** A sentence under the Library heading when there is nothing to play with. */
+function renderRetroArchNotice(status: RetroArchStatus): void {
+  const notice = $<HTMLElement>("retroarch-notice");
+  notice.replaceChildren();
+  notice.hidden = status.available;
+  if (status.available) return;
+
+  notice.appendChild(
+    el(
+      "p",
+      "notice-word",
+      "Den can shelve and name games without RetroArch, but it needs RetroArch to play them.",
+    ),
+  );
+  if (status.problem) notice.appendChild(el("p", "quiet", status.problem));
+
+  if (status.searched.length > 0) {
+    const details = el("details", "notice-where");
+    details.appendChild(el("summary", undefined, "Where Den looked"));
+    const list = el("ul", "extra-list mono");
+    for (const place of status.searched) list.appendChild(el("li", undefined, place));
+    details.appendChild(list);
+    notice.appendChild(details);
+  }
 }
 
 function renderShelves(data: LibraryView): void {
@@ -212,6 +248,9 @@ function renderGame(view: GameView): void {
   const play = el("button", "primary", "Play");
   const playIcon = icon("play");
   if (playIcon) play.prepend(playIcon);
+  // Say it before the press, not after it. A button that looks ready and then
+  // answers with an error is the interface withholding what it already knew.
+  play.disabled = !view.retroarch.available;
   play.addEventListener("click", () => {
     void (async () => {
       try {
@@ -223,6 +262,11 @@ function renderGame(view: GameView): void {
     })();
   });
   playRow.appendChild(play);
+  if (!view.retroarch.available) {
+    playRow.appendChild(
+      el("span", "quiet play-note", "RetroArch was not found — see the Library screen."),
+    );
+  }
   meta.appendChild(playRow);
 
   if (view.saves.length > 0) {

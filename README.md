@@ -49,7 +49,7 @@ machine and in CI without dragging platform GUI dependencies in.
 The core workspace needs nothing but a Rust toolchain:
 
 ```sh
-cargo test --workspace          # 60 tests, headless
+cargo test --workspace          # 65 tests, headless
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 ```
@@ -83,9 +83,11 @@ exactly as they were.
 
 Two things are worth knowing:
 
-- **RetroArch is not bundled.** Install it yourself and put it on `PATH`, or
-  set `RETROARCH` to the binary. Until then the library still works and
-  **Play** says plainly that it cannot find it.
+- **RetroArch is not bundled.** Install it however you like — a package, a
+  Snap, a Flatpak, the macOS app bundle, the Windows installer — and Den looks
+  for all of those. If yours lives somewhere unusual (an AppImage, say), set
+  `RETROARCH` to the binary. Until there is one, the library still works and
+  the Library screen says so, with the full list of places Den looked.
 - **BIOS files are your own.** Den recognises and files the common ones by
   name and by hash; it does not ship any.
 

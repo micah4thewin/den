@@ -10,10 +10,19 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-/// A script that stands in for RetroArch: it accepts any arguments and exits.
+/// A script that stands in for RetroArch: it writes down how it was called
+/// and exits.
 fn fake_retroarch(dir: &Path) -> std::path::PathBuf {
     let path = dir.join("retroarch");
-    fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
+    let log = dir.join("argv");
+    fs::write(
+        &path,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nexit 0\n",
+            log.display()
+        ),
+    )
+    .unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
     path
 }
@@ -61,6 +70,22 @@ fn a_launch_is_recorded_and_closed_when_the_emulator_exits() {
         sessions[0].0.duration_seconds.is_some(),
         "the session was left open"
     );
+
+    // What RetroArch was actually told. `-L` has to name a file: `mesen_libretro`
+    // on its own is not one on any platform, which is what it used to be given.
+    let argv = fs::read_to_string(tmp.path().join("argv")).unwrap();
+    let args: Vec<&str> = argv.lines().collect();
+    let core_arg = args
+        .iter()
+        .position(|a| *a == "-L")
+        .map(|i| args[i + 1])
+        .expect("a core was passed");
+    assert!(
+        core_arg.contains("mesen_libretro."),
+        "the core has to be a file name: {core_arg}"
+    );
+    assert!(args.contains(&"--fullscreen"));
+    assert!(args.iter().any(|a| a.ends_with("Zelda (USA).nes")));
 
     std::env::remove_var("RETROARCH");
 }

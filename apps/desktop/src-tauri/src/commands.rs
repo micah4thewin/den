@@ -3,7 +3,7 @@
 //! filesystem directly; it asks Den, which owns the library.
 
 use crate::{with_den, AppState, CommandResult};
-use den_core::{ControllerInfo, Game, LaunchInfo, Report, Save};
+use den_core::{ControllerInfo, Game, LaunchInfo, Report, RetroArchStatus, Save};
 use serde::Serialize;
 use std::path::Path;
 use tauri::State;
@@ -23,7 +23,7 @@ pub(crate) struct LibraryView {
     pub(crate) systems: Vec<SystemRow>,
     pub(crate) continue_game: Option<Game>,
     pub(crate) recent: Vec<Game>,
-    pub(crate) retroarch: bool,
+    pub(crate) retroarch: RetroArchStatus,
 }
 
 /// One game and its saves, for the Game screen.
@@ -31,6 +31,9 @@ pub(crate) struct LibraryView {
 pub(crate) struct GameView {
     pub(crate) game: Game,
     pub(crate) saves: Vec<Save>,
+    /// Carried here too: Play lives on this screen, so this is where somebody
+    /// needs to be told it cannot work yet.
+    pub(crate) retroarch: RetroArchStatus,
 }
 
 #[tauri::command]
@@ -56,7 +59,7 @@ pub(crate) fn get_library(state: State<'_, AppState>) -> CommandResult<LibraryVi
             systems,
             continue_game,
             recent,
-            retroarch: den.retroarch_available(),
+            retroarch: den.retroarch_status(),
         })
     })
 }
@@ -71,7 +74,11 @@ pub(crate) fn get_game(state: State<'_, AppState>, id: i64) -> CommandResult<Gam
             .map_err(|e| e.to_string())?
             .ok_or("game not found")?;
         let saves = den.db().list_saves(id).map_err(|e| e.to_string())?;
-        Ok(GameView { game, saves })
+        Ok(GameView {
+            game,
+            saves,
+            retroarch: den.retroarch_status(),
+        })
     })
 }
 
@@ -98,8 +105,8 @@ pub(crate) fn list_controllers(state: State<'_, AppState>) -> CommandResult<Vec<
 }
 
 #[tauri::command]
-pub(crate) fn retroarch_available(state: State<'_, AppState>) -> CommandResult<bool> {
-    with_den(&state, |den| Ok(den.retroarch_available()))
+pub(crate) fn retroarch_available(state: State<'_, AppState>) -> CommandResult<RetroArchStatus> {
+    with_den(&state, |den| Ok(den.retroarch_status()))
 }
 
 #[tauri::command]

@@ -44,6 +44,28 @@ the build plan's milestones, not semver.
   and for the glue object and its sessions (`crates/den-core/tests`).
 
 ### Fixed
+- **RetroArch was only ever looked for as `retroarch` on `PATH`,** resolved
+  once at startup. That misses the macOS app bundle (never on `PATH`),
+  `retroarch.exe` on Windows (so Den could not launch anything there at all),
+  the Flatpak build (exported as `org.libretro.RetroArch`), and any install a
+  GUI app's `PATH` does not reach — on macOS that is `/usr/bin:/bin:` and two
+  more, so a Homebrew RetroArch is invisible. Den now asks `PATH` under every
+  name RetroArch goes by, then the places the installers actually use, and it
+  asks again on every launch rather than only when the app started.
+- **The core was passed to `-L` as a bare word** (`mesen_libretro`), which is
+  not the name of a file on any platform. Den resolves the core to its real
+  path when it can find one, falls back to the platform's file name when it
+  cannot, and writes `libretro_directory` into the generated config — which
+  `--config` would otherwise blank out.
+- **Nothing said RetroArch was missing until you pressed Play.** The Library
+  screen carries a standing notice with the reason and every path Den tried,
+  and Play is disabled with a sentence beside it rather than answering a press
+  with an error toast. `LibraryView` had carried a `retroarch` flag all along
+  that the interface never read.
+- A `RETROARCH` that points at nothing is now named as the problem instead of
+  silently falling through to a `PATH` lookup nobody asked for, and a
+  directory or a non-executable file called `retroarch` is not mistaken for
+  one.
 - **A BIOS was shelved as a PlayStation game.** Identification asked the
   extension before the name, and every bundled BIOS name ends in `.bin`, which
   also belongs to Sega CD and PlayStation. `scph1001.bin` was filed as a disc,
@@ -104,7 +126,7 @@ the build plan's milestones, not semver.
   committed `__pycache__`.
 
 ### Verified
-- `cargo test --workspace` green: 60 tests across the six crates.
+- `cargo test --workspace` green: 65 tests across the six crates.
 - `cargo clippy --workspace --all-targets -- -D warnings` and
   `cargo fmt --all --check` clean.
 - `npm run build` (types and bundle) clean, with no unresolved assets.
@@ -112,8 +134,10 @@ the build plan's milestones, not semver.
 - All four screens rendered and driven in a real browser, light and dark.
 
 ### Known gaps
-- RetroArch is not installed on this machine; launch reports `NotFound`
-  gracefully until it is.
+- RetroArch is not installed on this machine; launch reports it gracefully,
+  and the interface says where it looked.
+- Cores are not installed for you. Den points RetroArch at the right core for
+  a system, but RetroArch has to have downloaded it.
 - `den-input` reads evdev names directly; gilrs + SDL gamecontrollerdb is the
   planned upgrade.
 - The intake screen has no password field, so an encrypted archive is

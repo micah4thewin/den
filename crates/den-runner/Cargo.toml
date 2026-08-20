@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 den-db = { path = "../den-db" }
 thiserror.workspace = true
+dirs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
