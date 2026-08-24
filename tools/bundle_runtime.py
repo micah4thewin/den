@@ -96,7 +96,7 @@ def system_candidates():
 
     home = os.path.expanduser("~")
     if sys.platform == "win32":
-        for var in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
+        for var in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "LOCALAPPDATA"):
             base = os.environ.get(var)
             if base:
                 out += [
@@ -104,6 +104,11 @@ def system_candidates():
                     os.path.join(base, "RetroArch-Win64", "retroarch.exe"),
                     os.path.join(base, "Programs", "RetroArch", "retroarch.exe"),
                 ]
+        out += [
+            os.path.join(home, "scoop/apps/retroarch/current/retroarch.exe"),
+            "C:/RetroArch-Win64/retroarch.exe",
+            "C:/RetroArch/retroarch.exe",
+        ]
     elif sys.platform == "darwin":
         out += [
             "/Applications/RetroArch.app/Contents/MacOS/RetroArch",
@@ -120,6 +125,8 @@ def system_candidates():
             "/var/lib/flatpak/exports/bin/org.libretro.RetroArch",
             os.path.join(home, ".local/share/flatpak/exports/bin/org.libretro.RetroArch"),
             os.path.join(home, ".local/bin/retroarch"),
+            "/opt/retroarch/retroarch",
+            "/opt/RetroArch/retroarch",
         ]
     return out
 
@@ -150,21 +157,43 @@ def is_a_wrapper(path):
     return target in ("flatpak", "snap")
 
 
+def config_and_data_dirs(home):
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA")
+        return base, base
+    if sys.platform == "darwin":
+        base = os.path.join(home, "Library", "Application Support")
+        return base, base
+    return (
+        os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"),
+        os.environ.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share"),
+    )
+
+
 def find_core_dir(retroarch):
     """The cores directory that goes with a RetroArch, if there is one."""
     home = os.path.expanduser("~")
     parent = os.path.dirname(retroarch)
-    for candidate in [
+    config_dir, data_dir = config_and_data_dirs(home)
+    candidates = [
         os.path.join(parent, "cores"),
         os.path.join(os.path.dirname(parent), "Resources", "cores"),
         os.path.join(home, ".config/retroarch/cores"),
         os.path.join(home, ".var/app/org.libretro.RetroArch/config/retroarch/cores"),
         os.path.join(home, "snap/retroarch/current/.config/retroarch/cores"),
         os.path.join(home, "Library/Application Support/RetroArch/cores"),
+    ]
+    if config_dir:
+        candidates.append(os.path.join(config_dir, "retroarch", "cores"))
+    if data_dir:
+        candidates.append(os.path.join(data_dir, "RetroArch", "cores"))
+    candidates += [
         "/usr/lib/libretro",
         "/usr/local/lib/libretro",
         "/usr/lib/x86_64-linux-gnu/libretro",
-    ]:
+        parent,
+    ]
+    for candidate in candidates:
         # It has to hold a core, not merely exist: a fresh install leaves an
         # empty ~/.config/retroarch/cores that would shadow the real one.
         if os.path.isdir(candidate) and any(

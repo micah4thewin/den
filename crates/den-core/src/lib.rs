@@ -139,8 +139,7 @@ const PAD_SETTING: &str = "pad_player:";
 /// gives it one back.
 const PAD_NOBODY: &str = "none";
 
-/// How many players RetroArch is configured for.
-pub const MAX_PLAYERS: usize = 4;
+pub use den_runner::MAX_PLAYERS;
 
 /// One launched emulator and the session row that is open for it.
 struct Live {
@@ -223,7 +222,7 @@ impl Den {
     /// rejected with a clear word until those profiles are wired.
     pub fn launch(&self, game_id: i64) -> Result<LaunchInfo, Error> {
         let game = self.db.get_game(game_id)?.ok_or(Error::NotFound)?;
-        let system = system_from_name(&game.system);
+        let system = System::from_name(&game.system);
         if matches!(
             system,
             Some(System::Ps2) | Some(System::Gamecube) | Some(System::Wii)
@@ -409,11 +408,6 @@ impl Den {
         Ok(())
     }
 
-    /// Whether RetroArch is available to launch.
-    pub fn retroarch_available(&self) -> bool {
-        self.runner.available()
-    }
-
     /// Where RetroArch is, or where Den looked for it and came up empty.
     pub fn retroarch_status(&self) -> RetroArchStatus {
         let searched = self
@@ -544,7 +538,7 @@ fn log_session_error(e: &rusqlite::Error) {
 
 /// Why a system cannot be launched at all, if it cannot.
 fn external_only(system: &str) -> Option<String> {
-    match system_from_name(system) {
+    match System::from_name(system) {
         Some(System::Ps2) | Some(System::Gamecube) | Some(System::Wii) => Some(format!(
             "{system} needs an external emulator, which Den does not drive yet"
         )),
@@ -557,7 +551,7 @@ fn external_only(system: &str) -> Option<String> {
 /// asks for can never drift apart.
 fn core_for(game: &Game) -> String {
     game.core.clone().unwrap_or_else(|| {
-        system_from_name(&game.system)
+        System::from_name(&game.system)
             .map(|s| s.default_core().to_string())
             .unwrap_or_default()
     })
@@ -579,26 +573,4 @@ fn load_dat(library: &Path) -> Index {
         }
     }
     den_ident::dat::bundled()
-}
-
-fn system_from_name(name: &str) -> Option<System> {
-    use System::*;
-    Some(match name {
-        "NES" => Nes,
-        "SNES" => Snes,
-        "Genesis" => Genesis,
-        "Sega CD" => SegaCd,
-        "Sega 32X" => Sega32x,
-        "N64" => N64,
-        "PlayStation" => Ps1,
-        "GB" => Gb,
-        "GBC" => Gbc,
-        "GBA" => Gba,
-        "Arcade" => Arcade,
-        "DOS" => Dos,
-        "PlayStation 2" => Ps2,
-        "GameCube" => Gamecube,
-        "Wii" => Wii,
-        _ => return None,
-    })
 }

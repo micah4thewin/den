@@ -13,28 +13,31 @@ pub use identify::{identify, FileKind, Identification};
 pub use shelve::Shelf;
 pub use unpack::{unpack_recursive, UnpackError, UnpackFailure};
 
+use den_db::now;
 use den_ident::dat::Index;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// The word-per-file outcome vocabulary from the build plan: a word, never a
 /// colour, never silence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "word", content = "detail")]
+#[serde(tag = "word", content = "detail", rename_all = "lowercase")]
 pub enum Outcome {
     /// Shelved as a new game.
+    #[serde(alias = "Added")]
     Added {
         /// The title it was shelved under.
         game: String,
     },
     /// A byte-for-byte copy of a game already on the shelf.
+    #[serde(alias = "Duplicate")]
     Duplicate {
         /// The title it duplicates.
         game: String,
     },
     /// Shelved after a repair (a missing .cue was written, for example).
+    #[serde(alias = "Repaired")]
     Repaired {
         /// The title it was shelved under.
         game: String,
@@ -42,26 +45,31 @@ pub enum Outcome {
         note: String,
     },
     /// Identified only by header or extension, not a hash match.
+    #[serde(alias = "Probable")]
     Probable {
         /// The title Den guessed.
         game: String,
     },
     /// A BIOS file, recognised and filed automatically.
+    #[serde(alias = "Bios")]
     Bios {
         /// The canonical name for this BIOS.
         name: String,
     },
     /// A rider file (manual, art, readme, save) that rides along.
+    #[serde(alias = "Extra")]
     Extra {
         /// What kind of rider it was.
         note: String,
     },
     /// Could not be used, kept with a reason and a retry path.
+    #[serde(alias = "Quarantined")]
     Quarantined {
         /// Why it could not be used.
         reason: String,
     },
     /// A format Den does not support.
+    #[serde(alias = "Unsupported")]
     Unsupported {
         /// Why the format is out of scope.
         reason: String,
@@ -185,9 +193,46 @@ fn copy_tree(src: &Path, dest: &Path) -> std::io::Result<()> {
     }
 }
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn outcome_words_serialize_lowercase() {
+        let entry = ReportEntry {
+            input: "/drop/sonic.md".to_string(),
+            outcome: Outcome::Added {
+                game: "Sonic".to_string(),
+            },
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains("\"word\":\"added\""), "{json}");
+        let back: ReportEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.outcome, entry.outcome);
+    }
+
+    #[test]
+    fn old_capitalized_records_still_deserialize() {
+        let old = r#"{
+            "started": 1,
+            "finished": 2,
+            "entries": [
+                {"input": "/drop/sonic.md",
+                 "outcome": {"word": "Added", "detail": {"game": "Sonic"}}},
+                {"input": "/drop/junk.xyz",
+                 "outcome": {"word": "Unsupported",
+                             "detail": {"reason": "unrecognised format"}}}
+            ]
+        }"#;
+        let report: Report = serde_json::from_str(old).unwrap();
+        assert_eq!(
+            report.entries[0].outcome,
+            Outcome::Added {
+                game: "Sonic".to_string()
+            }
+        );
+        assert_eq!(report.entries[1].outcome.word(), "unsupported");
+        let rewritten = serde_json::to_string(&report).unwrap();
+        assert!(rewritten.contains("\"word\":\"added\""), "{rewritten}");
+    }
 }

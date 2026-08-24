@@ -143,13 +143,39 @@ impl<'a> Shelf<'a> {
     }
 
     fn shelve_rom(&mut self, src: &Path, ident: &Identification) -> ReportEntry {
-        let system = ident.system.unwrap_or(System::Nes);
+        let fallback = ident.system.unwrap_or(System::Nes);
+        self.shelve_hashed(
+            src,
+            fallback,
+            |src| clean_title(&stem_of(src)),
+            |_, _, _| None,
+        )
+    }
+
+    fn shelve_disc(&mut self, src: &Path) -> ReportEntry {
+        self.shelve_hashed(
+            src,
+            disc_system_for(src),
+            disc_title,
+            |game_dir, name, system| stage_cues_for(src, game_dir, name, system),
+        )
+    }
+
+    fn shelve_hashed(
+        &mut self,
+        src: &Path,
+        fallback_system: System,
+        fallback_title: impl FnOnce(&Path) -> String,
+        after_copy: impl FnOnce(&Path, &str, System) -> Option<String>,
+    ) -> ReportEntry {
         let sha1 = hash::sha1_file(src).unwrap_or_default();
         let dat_entry = self.dat.lookup(&sha1);
         let title = dat_entry
             .map(|e| e.title.clone())
-            .unwrap_or_else(|| clean_title(&stem_of(src)));
-        let system = dat_entry.and_then(Index::system_of).unwrap_or(system);
+            .unwrap_or_else(|| fallback_title(src));
+        let system = dat_entry
+            .and_then(Index::system_of)
+            .unwrap_or(fallback_system);
         let probable = dat_entry.is_none();
         let file_name = file_name_of(src);
 
@@ -161,9 +187,7 @@ impl<'a> Shelf<'a> {
 
         if already {
             self.file_variant(src, &game_dir, &file_name);
-            if !sha1.is_empty() {
-                self.seen_hashes.insert(sha1);
-            }
+            self.note_hash(sha1);
             return ReportEntry {
                 input: src.display().to_string(),
                 outcome: Outcome::Duplicate { game: title },
@@ -174,20 +198,23 @@ impl<'a> Shelf<'a> {
         if let Err(e) = fs::copy(src, &dest) {
             return self.quarantine(src, &e.to_string());
         }
+        let repaired = after_copy(&game_dir, &file_name, system);
+
         let game_id = self.record_game(&title, system, &dest, Some(&sha1), size_of(src));
         self.remember(&title, &game_dir, game_id);
-        if !sha1.is_empty() {
-            self.seen_hashes.insert(sha1);
-        }
+        self.note_hash(sha1);
 
-        let outcome = if probable {
-            Outcome::Probable {
+        let outcome = match repaired {
+            Some(note) => Outcome::Repaired {
                 game: title.clone(),
-            }
-        } else {
-            Outcome::Added {
+                note,
+            },
+            None if probable => Outcome::Probable {
                 game: title.clone(),
-            }
+            },
+            None => Outcome::Added {
+                game: title.clone(),
+            },
         };
         ReportEntry {
             input: src.display().to_string(),
@@ -195,75 +222,9 @@ impl<'a> Shelf<'a> {
         }
     }
 
-    fn shelve_disc(&mut self, src: &Path) -> ReportEntry {
-        let system = disc_system_for(src);
-        let sha1 = hash::sha1_file(src).unwrap_or_default();
-        let dat_entry = self.dat.lookup(&sha1);
-        let title = dat_entry
-            .map(|e| e.title.clone())
-            .unwrap_or_else(|| disc_title(src));
-        let system = dat_entry.and_then(Index::system_of).unwrap_or(system);
-        let probable = dat_entry.is_none();
-        let ext = ext_of(src);
-        let file_name = file_name_of(src);
-
-        let already =
-            !sha1.is_empty() && (self.seen_hashes.contains(&sha1) || self.db_has_hash(&sha1));
-        let game_dir = self.library.join(system.name()).join(sanitize(&title));
-        fs::create_dir_all(&game_dir).ok();
-        self.remember(&title, &game_dir, None);
-
-        if already {
-            self.file_variant(src, &game_dir, &file_name);
-            if !sha1.is_empty() {
-                self.seen_hashes.insert(sha1);
-            }
-            return ReportEntry {
-                input: src.display().to_string(),
-                outcome: Outcome::Duplicate { game: title },
-            };
-        }
-
-        let dest = game_dir.join(&file_name);
-        if let Err(e) = fs::copy(src, &dest) {
-            return self.quarantine(src, &e.to_string());
-        }
-
-        let cues = sibling_cues(src);
-        let mut repaired_note = String::new();
-        if ext == "bin" && cues.is_empty() && is_disc_system(system) {
-            write_cue(&game_dir, &file_name, system);
-            repaired_note = "generated missing cue sheet".to_string();
-        }
-        for cue in &cues {
-            if let Some(name) = cue.file_name() {
-                fs::copy(cue, game_dir.join(name)).ok();
-            }
-        }
-
-        let game_id = self.record_game(&title, system, &dest, Some(&sha1), size_of(src));
-        self.remember(&title, &game_dir, game_id);
+    fn note_hash(&mut self, sha1: String) {
         if !sha1.is_empty() {
             self.seen_hashes.insert(sha1);
-        }
-
-        let outcome = if !repaired_note.is_empty() {
-            Outcome::Repaired {
-                game: title.clone(),
-                note: repaired_note,
-            }
-        } else if probable {
-            Outcome::Probable {
-                game: title.clone(),
-            }
-        } else {
-            Outcome::Added {
-                game: title.clone(),
-            }
-        };
-        ReportEntry {
-            input: src.display().to_string(),
-            outcome,
         }
     }
 
@@ -279,24 +240,12 @@ impl<'a> Shelf<'a> {
 
         let mut notes: Vec<Option<String>> = Vec::with_capacity(files.len());
         for f in files {
-            let ext = ext_of(f);
             let name = file_name_of(f);
             if let Err(e) = fs::copy(f, game_dir.join(&name)) {
                 notes.push(Some(format!("!{e}")));
                 continue;
             }
-            let cues = sibling_cues(f);
-            let mut note = None;
-            if ext == "bin" && cues.is_empty() && is_disc_system(system) {
-                write_cue(&game_dir, &name, system);
-                note = Some("generated missing cue sheet".to_string());
-            }
-            for cue in &cues {
-                if let Some(cn) = cue.file_name() {
-                    fs::copy(cue, game_dir.join(cn)).ok();
-                }
-            }
-            notes.push(note);
+            notes.push(stage_cues_for(f, &game_dir, &name, system));
         }
 
         let mut cue_files: Vec<String> = fs::read_dir(&game_dir)
@@ -532,6 +481,21 @@ fn sibling_cues(disc: &Path) -> Vec<PathBuf> {
         .collect();
     out.sort();
     out
+}
+
+fn stage_cues_for(src: &Path, game_dir: &Path, file_name: &str, system: System) -> Option<String> {
+    let cues = sibling_cues(src);
+    let mut note = None;
+    if ext_of(src) == "bin" && cues.is_empty() && is_disc_system(system) {
+        write_cue(game_dir, file_name, system);
+        note = Some("generated missing cue sheet".to_string());
+    }
+    for cue in &cues {
+        if let Some(name) = cue.file_name() {
+            fs::copy(cue, game_dir.join(name)).ok();
+        }
+    }
+    note
 }
 
 fn disc_system_for(src: &Path) -> System {

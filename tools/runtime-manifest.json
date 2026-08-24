@@ -1,4 +1,10 @@
 {
+  "_sync": [
+    "tools/bundle_runtime.py re-implements den-runner's search in Python:",
+    "system_candidates() mirrors candidates() and find_core_dir() mirrors",
+    "core_dir() in crates/den-runner/src/locate.rs. The two lists must move",
+    "together: a path added on one side is added on the other."
+  ],
   "_comment": [
     "Where tools/bundle_runtime.py --from-manifest downloads a RetroArch from.",
     "",

@@ -88,7 +88,8 @@ pub struct Db {
     conn: Connection,
 }
 
-fn now() -> i64 {
+/// The current unix time in seconds, the clock every table's rows carry.
+pub fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -99,17 +100,16 @@ impl Db {
     /// Open (creating if needed) the database at `path`.
     pub fn open(path: &Path) -> rusqlite::Result<Db> {
         let conn = Connection::open(path)?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
-        let db = Db { conn };
-        db.migrate()?;
-        Ok(db)
+        Db::init(conn)
     }
 
     /// Open the database in memory (for tests).
     pub fn open_in_memory() -> rusqlite::Result<Db> {
-        let conn = Connection::open_in_memory()?;
+        Db::init(Connection::open_in_memory()?)
+    }
+
+    fn init(conn: Connection) -> rusqlite::Result<Db> {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         let db = Db { conn };
@@ -682,13 +682,10 @@ mod tests {
     fn wal_mode_is_on() {
         let dir = tempfile::tempdir().unwrap();
         let db = Db::open(&dir.path().join("library.db")).unwrap();
-        drop(db);
-        let files: Vec<String> = std::fs::read_dir(dir.path())
-            .unwrap()
-            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-            .collect();
-        assert!(files
-            .iter()
-            .any(|f| f.ends_with("-wal") || f.contains("wal") || f == "library.db"));
+        let mode: String = db
+            .conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(mode.to_ascii_lowercase(), "wal");
     }
 }

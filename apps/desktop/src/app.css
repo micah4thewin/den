@@ -169,7 +169,7 @@
 
 .row-band { display: flex; flex-direction: column; gap: var(--gap-3); }
 
-.row-band > h2 {
+.section-label {
   font-size: 0.82rem;
   font-weight: 400;
   color: var(--text-2);
@@ -308,16 +308,6 @@
   gap: var(--gap-1);
 }
 
-/* The same quiet section label the shelves and the report card use. A field
- * heading is a label for the list under it, not a second title for the page. */
-.game-meta .field h2 {
-  font-size: 0.82rem;
-  font-weight: 400;
-  color: var(--text-2);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .extra-list {
   list-style: none;
   margin: 0;
@@ -379,11 +369,6 @@
 
 .report-card h2 {
   padding: var(--gap-3) var(--gap-4);
-  font-size: 0.82rem;
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-2);
   border-bottom: 1px solid var(--edge);
 }
 
@@ -512,27 +497,6 @@
 }
 
 .keymap dd { margin: 0; }
-
-/* A press-to-test pip: sunken by default, pressed in when the pad speaks. */
-.pips {
-  display: flex;
-  gap: var(--gap-2);
-  flex-wrap: wrap;
-}
-
-.pip {
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: var(--r-pill);
-  background: var(--sunken);
-  box-shadow: var(--press-1);
-  transition: box-shadow var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease-soft);
-}
-
-.pip.lit {
-  background: var(--active);
-  box-shadow: var(--press-2);
-}
 
 /* ---- toast --------------------------------------------------------------- */
 

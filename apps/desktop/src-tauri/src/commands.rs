@@ -146,22 +146,9 @@ pub(crate) fn assign_pad(
 }
 
 #[tauri::command]
-pub(crate) fn retroarch_available(state: State<'_, AppState>) -> CommandResult<RetroArchStatus> {
-    with_den(&state, |den| Ok(den.retroarch_status()))
-}
-
-#[tauri::command]
 pub(crate) fn choose_folder() -> CommandResult<Option<String>> {
     let picked = rfd::FileDialog::new().pick_folder();
     Ok(picked.map(|p| p.display().to_string()))
-}
-
-#[tauri::command]
-pub(crate) fn open_library_folder(state: State<'_, AppState>) -> CommandResult<()> {
-    with_den(&state, |den| {
-        let path = den.library.display().to_string();
-        open_in_file_manager(&path)
-    })
 }
 
 /// Let somebody point Den at a RetroArch by hand.
@@ -189,28 +176,4 @@ pub(crate) fn clear_retroarch(state: State<'_, AppState>) -> CommandResult<Retro
     with_den(&state, |den| {
         den.set_retroarch_path(None).map_err(|e| e.to_string())
     })
-}
-
-/// Open a directory in the platform's file manager.
-fn open_in_file_manager(path: &str) -> CommandResult<()> {
-    #[cfg(target_os = "macos")]
-    let mut cmd = std::process::Command::new("open");
-    #[cfg(target_os = "windows")]
-    let mut cmd = std::process::Command::new("explorer");
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut cmd = std::process::Command::new("xdg-open");
-
-    #[cfg(any(
-        target_os = "macos",
-        target_os = "windows",
-        all(unix, not(target_os = "macos"))
-    ))]
-    {
-        // `spawn`, not `status`: a file manager that stays in the foreground
-        // would otherwise hold the command -- and the library lock with it --
-        // for as long as the window is open.
-        cmd.arg(path);
-        cmd.spawn().map_err(|e| e.to_string())?;
-    }
-    Ok(())
 }
