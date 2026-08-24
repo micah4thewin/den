@@ -78,6 +78,16 @@ the build plan's milestones, not semver.
   and for the glue object and its sessions (`crates/den-core/tests`).
 
 ### Fixed
+- **The pad was plugged in and the game could not see it.** Den handed
+  RetroArch the kernel's `jsN` number as `input_playerN_joypad_index`, but
+  RetroArch's udev joypad driver fills its slots densely from 0 in its own
+  attach order and never reads `jsN` numbers — so a lone controller that came
+  back as `js1` (a Bluetooth reconnect, a replug with the old node still
+  held open) was bound to an empty slot and dead in-game. A pad's index is
+  now its rank among attached pads, dense from 0. Joydev nodes are also held
+  to the same `BTN_GAMEPAD` capability check as event nodes, so an
+  accelerometer or wheel on `js0` can no longer steal Player 1 or shift the
+  real pad's slot.
 - **A gamepad was detected and then nothing happened to it.** `player` was
   hard-coded `None`, the Controllers screen printed "Unassigned" with no
   control beside it, and no pad was ever mentioned to RetroArch at all. A pad

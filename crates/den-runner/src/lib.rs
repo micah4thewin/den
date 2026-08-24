@@ -918,9 +918,9 @@ fn write_config(
         content.push_str(&format!("libretro_directory = \"{}\"\n", cores.display()));
     }
 
-    // Which pad answers for which player. RetroArch counts pads in the order
-    // the kernel hands them over, which is joystick order -- the same order
-    // den-input reports them in.
+    // Which pad answers for which player. RetroArch's udev joypad driver
+    // fills its slots densely from 0 in attach order, so the index den-input
+    // reports is the pad's rank among attached pads, not its js number.
     content.push_str("\n# Den, controllers\n");
     content.push_str(&format!("input_max_users = \"{}\"\n", MAX_PLAYERS));
     for binding in players {

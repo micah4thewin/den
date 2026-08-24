@@ -10,11 +10,14 @@
 //! machine has: the kernel calls an Xbox pad `Microsoft X-Box 360 pad`, and
 //! `x-box` is not `xbox`. Two better questions are available:
 //!
-//! 1. **Is there a `js` node?** The kernel creates one only for a joystick.
-//!    Every pad has exactly one, which also makes it the natural identity.
-//! 2. **Does it report `BTN_GAMEPAD`?** The capability bitmask in sysfs says
-//!    so outright. This is the fallback for a system whose `joydev` module is
-//!    not loaded, and it is what udev itself looks at.
+//! 1. **Does it report `BTN_GAMEPAD`?** The capability bitmask in sysfs says
+//!    so outright, for `js` and `event` nodes alike, and it is what udev
+//!    itself looks at. A joydev node alone is not enough: accelerometers,
+//!    wheels and UPSes get one too, and a non-pad that slips through here
+//!    steals player one.
+//! 2. **Is there a `js` node?** The kernel creates one only for a joystick,
+//!    which makes it the natural identity for a pad, and its number gives
+//!    the stable order pads are ranked in.
 
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -31,7 +34,7 @@ const BTN_GAMEPAD: usize = 0x130;
 #[derive(Debug, Clone, Serialize)]
 pub struct ControllerInfo {
     /// The kernel's node for the device (`js0`), stable while it is plugged
-    /// in and the number RetroArch counts pads by.
+    /// in.
     pub id: String,
     /// A name for this pad that survives unplugging it: vendor, product, and
     /// what it calls itself. Assignments are stored against this, so a pad
@@ -41,7 +44,10 @@ pub struct ControllerInfo {
     pub name: String,
     /// Which player this pad is assigned to, from 1.
     pub player: Option<usize>,
-    /// The joystick number, which is the index RetroArch is told to use.
+    /// The index RetroArch is told to use: the pad's rank among attached
+    /// pads, dense from 0. RetroArch's udev joypad driver fills slots
+    /// 0..n-1 in its own enumeration order and never consults `jsN`
+    /// numbers, so a lone pad on `js1` is still its slot 0.
     pub index: Option<usize>,
 }
 
@@ -98,7 +104,7 @@ pub fn detect_in(root: &Path) -> Vec<ControllerInfo> {
     let mut nodes: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
     // Joystick nodes first, so that when one pad is visible as both `js0` and
     // `event7` it is the `js0` that is kept -- that is the node carrying the
-    // number RetroArch counts pads by, and `event7` sorts first alphabetically.
+    // pad's identity and its rank, and `event7` sorts first alphabetically.
     nodes.sort_by_key(|p| {
         let name = p
             .file_name()
@@ -118,7 +124,7 @@ pub fn detect_in(root: &Path) -> Vec<ControllerInfo> {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         let is_js = file_name.starts_with("js");
-        if !is_js && !reports_gamepad_buttons(node) {
+        if !reports_gamepad_buttons(node) {
             continue;
         }
         let name = read_trimmed(&node.join("device/name"));
@@ -143,8 +149,11 @@ pub fn detect_in(root: &Path) -> Vec<ControllerInfo> {
     }
 
     // A `js` node is preferred over an `event` node for the same device, and
-    // pads come back in joystick order, which is the order RetroArch counts
-    // them in.
+    // pads come back in joystick order. Their RetroArch index is their rank
+    // in that order, dense from 0: the udev joypad driver fills slots
+    // 0..n-1 by its own count and never reads `jsN` numbers, so a gap in
+    // the js numbering (a Bluetooth pad that came back as `js1`) must not
+    // become a gap in the slots.
     let mut pads: Vec<ControllerInfo> = found.into_values().collect();
     pads.sort_by(|a, b| match (a.index, b.index) {
         (Some(x), Some(y)) => x.cmp(&y),
@@ -152,6 +161,9 @@ pub fn detect_in(root: &Path) -> Vec<ControllerInfo> {
         (None, Some(_)) => std::cmp::Ordering::Greater,
         (None, None) => a.id.cmp(&b.id),
     });
+    for (rank, pad) in pads.iter_mut().enumerate() {
+        pad.index = Some(rank);
+    }
     pads
 }
 
@@ -394,8 +406,9 @@ mod tests {
         let pads = detect_in(root);
         assert_eq!(pads.len(), 1, "{pads:#?}");
         assert_eq!(
-            pads[0].index, None,
-            "no joystick node means no index to give"
+            pads[0].index,
+            Some(0),
+            "a pad with no joystick node still holds a udev slot"
         );
     }
 
@@ -455,9 +468,67 @@ mod tests {
         );
         let pads = detect_in(root);
         assert_eq!(
+            pads.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            vec!["Pad Two", "Pad Ten"],
+            "pads rank in joystick order"
+        );
+        assert_eq!(
             pads.iter().map(|p| p.index).collect::<Vec<_>>(),
-            vec![Some(2), Some(10)],
-            "RetroArch counts pads in joystick order, so Den has to as well"
+            vec![Some(0), Some(1)],
+            "RetroArch's udev driver fills slots densely from 0, never by js number"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_lone_pad_on_a_high_joystick_number_is_still_slot_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        plant_pad(
+            root,
+            "input5",
+            Some("js1"),
+            "8BitDo SN30 Pro",
+            ("2dc8", "6001"),
+            &gamepad_caps(),
+        );
+        let pads = detect_in(root);
+        assert_eq!(pads.len(), 1, "{pads:#?}");
+        assert_eq!(
+            pads[0].index,
+            Some(0),
+            "the only attached pad is RetroArch's slot 0 whatever its js number"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_joystick_node_without_gamepad_buttons_is_not_a_pad() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        plant_pad(
+            root,
+            "input3",
+            Some("js0"),
+            "ST LIS3LV02DL Accelerometer",
+            ("0000", "0000"),
+            "0 0 0 0 0 0",
+        );
+        plant_pad(
+            root,
+            "input5",
+            Some("js1"),
+            "Microsoft X-Box 360 pad",
+            ("045e", "028e"),
+            &gamepad_caps(),
+        );
+        let pads = detect_in(root);
+        assert_eq!(pads.len(), 1, "{pads:#?}");
+        assert_eq!(pads[0].name, "Microsoft X-Box 360 pad");
+        assert_eq!(
+            pads[0].index,
+            Some(0),
+            "a non-pad joydev device must not steal player one or shift the slots"
         );
     }
 
