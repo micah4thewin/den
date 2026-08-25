@@ -70,9 +70,13 @@ Hearth has no such case and therefore has no such exception.
 ## 2. Tokens
 
 `tokens.css` in lockbox, hearth, and den, `app/src/index.css` in lanflix,
-and it is the only stylesheet holding a colour literal. (Lockbox's
-whiteboard palette and its print-only recovery sheet are the recorded
-exceptions; its own notes say where and why.) Two layers:
+and it is the only stylesheet the application chrome reads that holds a
+colour literal. Standalone pages a program serves or exports carry their
+own embedded copy of the palette, because nothing guarantees them the
+token file — hearth's remote client, lockbox's verifier and portal — and
+what they embed is the same greys. (Lockbox's whiteboard palette and its
+print-only recovery sheet are its recorded exceptions; its own notes say
+where and why.) Two layers:
 
 - **Seeds** — the raw palette, one flat list of literals per mode. Every
   value is a literal rather than something derived with `color-mix()`,
