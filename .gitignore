@@ -1,36 +1,25 @@
-# Build artifacts
 target/
 **/target/
 
-# The lockfile is not committed: this workspace is a set of libraries plus a
-# shell that pins its own. Nothing here is a published binary whose exact
-# dependency graph has to be reproducible from the repository alone.
 Cargo.lock
 
-# Node
 node_modules/
 dist/
 
-# The bundled emulator, staged by tools/bundle_runtime.py. Large, somebody
-# else's to distribute, and reproducible from the script.
 apps/desktop/src-tauri/resources/runtime/*
 !apps/desktop/src-tauri/resources/runtime/README.md
 
-# Python
 __pycache__/
 *.py[cod]
 
-# OS
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# Logs
 *.log

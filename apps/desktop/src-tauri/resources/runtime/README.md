@@ -16,6 +16,6 @@ and the bundler always has something to copy.
     python3 ../../tools/bundle_runtime.py      # stage the system RetroArch
     npm run tauri build                        # stage, then build
 
-Read the licence note at the top of `tools/bundle_runtime.py` before handing a
-bundle to anybody else: RetroArch is GPLv3, and several of the default cores
-carry non-commercial terms.
+Read the licence section of the root `README.md` before handing a bundle to
+anybody else: RetroArch is GPLv3, and several of the default cores carry
+non-commercial terms.
