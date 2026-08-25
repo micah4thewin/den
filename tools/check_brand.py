@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Assert that the brand mark in the interface is the one on the icon.
-
-    python3 tools/check_brand.py
-
-Two things can drift and neither would fail a build on its own: the mark
-drawn in the interface (apps/desktop/src/ui/icons.ts, `brandDen`) and the
-mark rasterized onto the application icon (tools/brand.py). They are the same
-drawing on purpose, so this compares them path by path and exits non-zero if
-they differ.
-
-It also checks the committed icon files still match what the generator
-produces right now, which catches the other half of the problem: a mark that
-was edited without anyone re-running tools/generate_icons.py.
-"""
+"""Assert that the brand mark in the interface is the one on the icon."""
 
 import os
 import re
@@ -31,17 +18,26 @@ PUBLIC_DIR = os.path.join(ROOT, "apps", "desktop", "public")
 
 
 def normalize(d):
-    """Path data, with runs of whitespace flattened to single spaces."""
     return re.sub(r"\s+", " ", d).strip()
 
 
+def bracketed(source, key):
+    start = source.index(key)
+    i = source.index("[", start)
+    depth = 0
+    for j in range(i, len(source)):
+        if source[j] == "[":
+            depth += 1
+        elif source[j] == "]":
+            depth -= 1
+            if depth == 0:
+                return source[start:j]
+    raise ValueError(f"unterminated block after {key}")
+
+
 def interface_paths():
-    """The `brandDen` path data, read out of the TypeScript source."""
     source = open(ICONS_TS, encoding="utf-8").read()
-    start = source.index("brandDen: [")
-    end = source.index("// chrome", start)
-    body = source[start:end]
-    # Adjacent string literals joined with `+` across lines are one path.
+    body = bracketed(source, "brandDen: [")
     body = re.sub(r'"\s*\+\s*"', "", body)
     return [normalize(m) for m in re.findall(r'"((?:M|m)[^"]*)"', body)]
 
@@ -51,7 +47,6 @@ def sheet_paths():
 
 
 def _check_generated():
-    """Compare the committed icon files against the generator's output."""
     problems = []
     tiles = brand.render(MARK, generate_icons.SIZES)
     encoded = {size: brand.png(rows, size) for size, rows in tiles.items()}

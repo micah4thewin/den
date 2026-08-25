@@ -1,10 +1,9 @@
 # Den and the shared design system
 
 [`DESIGN.md`](DESIGN.md) beside this file is the family document, byte-identical
-in the lockbox and hearth repositories. It describes the system; it does not
-describe Den, because it predates Den and rewriting it here would break the
-byte-identity that makes it worth having. This note is the adaptation, in the
-same spirit as lanflix's.
+in the lockbox, hearth, and den repositories. It describes the system and names
+all four programs; this note is Den's adaptation, in the same spirit as
+lanflix's — only the places where a launcher differs.
 
 Den is a fourth program on the same interface: greyscale by rule, three
 materials, one icon geometry, a container holding one emblem.

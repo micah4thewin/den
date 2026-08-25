@@ -23,7 +23,6 @@ const ICONS: Record<string, Shape[]> = {
     solid("M 10.4 10.4 L 14.6 12.5 L 10.4 14.6 Z"),
   ],
 
-  // chrome
   menu: [p("M4 6h16"), p("M4 12h16"), p("M4 18h16")],
   close: [p("M18 6 6 18"), p("M6 6l12 12")],
   plus: [p("M12 5v14"), p("M5 12h14")],

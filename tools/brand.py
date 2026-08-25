@@ -1,73 +1,15 @@
 #!/usr/bin/env python3
-"""The brand sheet: three marks, one geometry, and a renderer for all.
-
-This file is byte-identical in the lockbox, hearth, and den repositories. That is
-the point of it. The two applications are made by the same hand, and the
-cheapest way to say so and keep saying so is for the marks to come off one
-sheet that either repository can regenerate and anybody can diff.
-
-    python3 tools/generate_icons.py        # in either repository
-
-# What is here
-
-`MARKS` holds both marks as SVG path data on a 24x24 grid -- the same grid,
-the same 2.0 stroke, the same round caps and joins as every glyph in the
-interface icon set (lockbox: apps/desktop/src/ui/icons.ts, hearth:
-src/js/icons.js). The application icon is therefore not a picture that
-resembles the interface; it is the interface's own glyph, rasterized larger.
-`tools/check_brand.py` fails the build if the two ever drift apart.
-
-Each mark is a container holding one emblem, because that is what both
-programs are:
-
-    lockbox   a box, closed, with a keyhole      a place things are kept
-    hearth    an arch, open, with a flame        a place things are done
-    den       a CRT, with a play triangle       a place games are played
-
-# Why a rasterizer lives in a repository
-
-An icon is the one asset a reader cannot diff. A repository that ships
-binaries nobody can regenerate accumulates files whose provenance is a
-shrug. Pure standard library, so regenerating needs no wheel, no lockfile,
-and no network: PNG is a signature, three chunks and a CRC; ICO and ICNS
-are containers around those PNGs; and the path renderer below is a few
-hundred lines because the alternative is depending on Cairo to draw eight
-shapes.
-
-The renderer is deliberately small rather than general. It reads the subset
-of SVG path syntax the marks use, flattens curves to polylines, and fills
-by scanline (non-zero winding) or strokes by capsule coverage. It has no
-opinion about colour, gradients, dash patterns, or miter joins, because the
-brand has none either.
-"""
+"""The brand sheet: three marks, one geometry, and a renderer for all."""
 
 import math
 import struct
 import zlib
 from array import array
 
-# ---------------------------------------------------------------------------
-# The marks
-# ---------------------------------------------------------------------------
-
-# Both marks are drawn in a 24x24 box, stroked at 2.0 with round caps and
-# joins, and are symmetric about x = 12. Where a shape is filled instead of
-# stroked it is because the shape is small enough that an outline would
-# close up into a blob at 32px -- the keyhole and the flame are emblems, not
-# outlines, and they carry the mark at icon sizes.
-#
-# Keep every coordinate on a half-unit where the drawing allows it. Marks
-# that land on the grid stay crisp when a platform rasterizes them at a size
-# nobody here anticipated.
 
 STROKE = 2.0
 
 MARKS = {
-    # A padlock: a rounded body, a shackle over it, a keyhole in it.
-    #
-    # The body is drawn as an explicit rounded rectangle rather than a
-    # <rect rx>, so the same path data serves the interface glyph and the
-    # renderer below without either needing to know what a rect is.
     "lockbox": [
         {
             "d": (
@@ -78,8 +20,6 @@ MARKS = {
             "stroke": STROKE,
         },
         {"d": "M 8 10 V 7 A 4 4 0 0 1 16 7 V 10", "stroke": STROKE},
-        # The keyhole, filled: a bore with a tapering ward below it. One
-        # closed path so it reads as a single cut rather than two marks.
         {
             "d": (
                 "M 12 13.1 A 1.7 1.7 0 0 0 11.1 16.25 L 10.7 18.4 "
@@ -88,23 +28,9 @@ MARKS = {
             "fill": True,
         },
     ],
-    # A hearth: the arch of the opening, the floor it stands on, a fire in it.
-    #
-    # The arch is a true semicircle (chord 16, radius 8) on straight legs,
-    # so it is the same family of shape as the padlock body above -- a
-    # container, closed at the top, open where you reach into it.
     "hearth": [
         {"d": "M 4 20.5 V 12 A 8 8 0 0 1 20 12 V 20.5", "stroke": STROKE},
         {"d": "M 2.5 20.5 H 21.5", "stroke": STROKE},
-        # The flame, filled and symmetric. A leaning flame is warmer and
-        # every bit as legible, but it would be the only asymmetric thing
-        # either mark contains, and the pair is quieter without it.
-        #
-        # The tip matters more than the body. Drawn with the control points
-        # close to the axis it comes to a real point, roughly 28 degrees,
-        # and the shape reads as fire; drawn with them further out the
-        # curve closes over into a dome and the same shape reads as a
-        # water drop, which is a hard thing to unsee once seen.
         {
             "d": (
                 "M 12 7.8 C 12.9 10.6 15.5 12.9 15.5 16.2 "
@@ -116,10 +42,6 @@ MARKS = {
         },
     ],
     "den": [
-        # A CRT television: a rounded body, two antenna stubs, and a play
-        # triangle on the glass. The body is the container, the triangle is
-        # the emblem, exactly like the keyhole in the lockbox body and the
-        # flame under the hearth arch.
         {
             "d": (
                 "M 5 7 H 19 A 2 2 0 0 1 21 9 V 16 "
@@ -130,10 +52,6 @@ MARKS = {
         },
         {"d": "M 9.5 7 V 4", "stroke": STROKE},
         {"d": "M 14.5 7 V 4", "stroke": STROKE},
-        # The play triangle, filled and symmetric. It points right, toward
-        # the thing that happens when you press it. Like the keyhole and the
-        # flame, it is small enough that an outline would close into a blob
-        # at icon sizes, so it is filled.
         {
             "d": "M 10.4 10.4 L 14.6 12.5 L 10.4 14.6 Z",
             "fill": True,
@@ -141,35 +59,17 @@ MARKS = {
     ],
 }
 
-# ---------------------------------------------------------------------------
-# Tile
-# ---------------------------------------------------------------------------
 
-# The two tones. Deliberately not pure black: a #000 icon looks like a hole
-# punched in a dark dock. These are the --fg and --page tokens from the
-# shared palette, so the icon is made of the interface's own two greys.
 INK = (0x1B, 0x1D, 0x20)
 PAPER = (0xF2, 0xF4, 0xF6)
 
-# All in canvas units, 0..1 across the icon.
-TILE_HALF = 0.461  # half-width of the tile; leaves a hair of padding
-TILE_RADIUS = 0.198  # corner radius; ~21% of the tile, the modern squircle
-MARK_SPAN = 0.64  # the 24-unit mark box, as a fraction of the canvas
-
-
-# ---------------------------------------------------------------------------
-# Path reading
-# ---------------------------------------------------------------------------
+TILE_HALF = 0.461
+TILE_RADIUS = 0.198
+MARK_SPAN = 0.64
 
 
 def _numbers(text):
-    """Every number in a path data string, in order.
-
-    Handles the three things SVG path data does that a naive split does
-    not: a minus sign that begins a number rather than separating two, a
-    decimal point that begins the *next* number ("1.5.5" is two numbers),
-    and exponents.
-    """
+    """Every number in a path data string, in order."""
     out = []
     i, n = 0, len(text)
     while i < n:
@@ -215,11 +115,6 @@ def _tokenize(d):
         start = i
         while i < n and not d[i].isalpha():
             i += 1
-        # An arc's flags are single digits and may be written without any
-        # separator ("0 0 1 8 0"), which the number reader handles, but a
-        # flag glued to the next number ("0011 8") would not round-trip.
-        # The marks here always space their arc arguments, and the check
-        # below catches it loudly if one ever does not.
         args = _numbers(d[start:i])
         arity = {
             "M": 2, "L": 2, "T": 2, "H": 1, "V": 1,
@@ -231,7 +126,6 @@ def _tokenize(d):
         if not args or len(args) % arity:
             raise ValueError(f"{letter} wants a multiple of {arity} arguments, got {len(args)}")
         for k in range(0, len(args), arity):
-            # A repeated M continues as L, per the SVG grammar.
             follow = letter
             if k and letter == "M":
                 follow = "L"
@@ -271,7 +165,6 @@ def _arc(p0, rx, ry, phi_deg, large, sweep, p1, steps):
     x1p = cos_p * dx2 + sin_p * dy2
     y1p = -sin_p * dx2 + cos_p * dy2
 
-    # Scale the radii up if they are too small to span the endpoints.
     lam = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry)
     if lam > 1:
         s = math.sqrt(lam)
@@ -313,17 +206,12 @@ def _arc(p0, rx, ry, phi_deg, large, sweep, p1, steps):
 
 
 def flatten(d, steps=24):
-    """Path data to a list of subpaths.
-
-    Each subpath is `(points, closed)`. Points are in the path's own units;
-    a closed subpath does not repeat its first point.
-    """
+    """Path data to a list of subpaths."""
     subpaths = []
     points = []
     closed = False
     start = (0.0, 0.0)
     cursor = (0.0, 0.0)
-    # The reflected control point for a smooth curve continuation.
     last_control = None
     last_kind = None
 
@@ -396,7 +284,6 @@ def flatten(d, steps=24):
                 else:
                     q = (cx, cy)
             p3 = (cx + x, cy + y) if relative else (x, y)
-            # Quadratic to cubic, exactly.
             p1 = (cx + 2.0 / 3.0 * (q[0] - cx), cy + 2.0 / 3.0 * (q[1] - cy))
             p2 = (p3[0] + 2.0 / 3.0 * (q[0] - p3[0]), p3[1] + 2.0 / 3.0 * (q[1] - p3[1]))
             points.extend(_cubic((cx, cy), p1, p2, p3, steps))
@@ -417,18 +304,8 @@ def flatten(d, steps=24):
     return subpaths
 
 
-# ---------------------------------------------------------------------------
-# Rasterizing
-# ---------------------------------------------------------------------------
-
-
 def _split_long(points, limit):
-    """Break long straight runs up so each segment has a tight bounding box.
-
-    The stroker walks the bounding box of every segment. For a long
-    diagonal that box is mostly empty, and the wasted work grows with the
-    square of the length; capping the length keeps it linear.
-    """
+    """Break long straight runs up so each segment has a tight bounding box."""
     if limit <= 0:
         return points
     out = [points[0]]
@@ -446,12 +323,7 @@ def _split_long(points, limit):
 
 
 def _capsule(mask, n, p0, p1, half):
-    """Set every sample within `half` of the segment p0-p1.
-
-    Round caps and round joins both fall out of this for free: a capsule
-    is a segment dilated by a disc, and consecutive capsules that share an
-    endpoint already overlap on the disc at that point.
-    """
+    """Set every sample within `half` of the segment p0-p1."""
     x0, y0 = p0
     x1, y1 = p1
     lo_x = max(0, int(math.floor(min(x0, x1) - half)))
@@ -528,11 +400,7 @@ def _rounded_rect_path(half, radius):
 
 
 def rasterize(shapes, n, place=None):
-    """Render `shapes` into an n-by-n coverage mask of 0/1 bytes.
-
-    `place` maps a point from the shape's own units into canvas units; the
-    default treats the shapes as already being in canvas units.
-    """
+    """Render `shapes` into an n-by-n coverage mask of 0/1 bytes."""
     mask = bytearray(n * n)
     for shape in shapes:
         loops = []
@@ -546,9 +414,6 @@ def rasterize(shapes, n, place=None):
         else:
             width = shape["stroke"]
             if place:
-                # Measure the stroke through the same mapping the points
-                # took, so it scales with the mark instead of being a
-                # number in the wrong space.
                 ax, ay = place(0.0, 0.0)
                 bx, by = place(width, 0.0)
                 width = math.hypot(bx - ax, by - ay)
@@ -598,12 +463,7 @@ def _downsample(sums, n, size):
 
 
 def render(mark, sizes, master=2048):
-    """Render one named mark on its tile at each requested size.
-
-    Returns `{size: [rows of RGBA bytes]}`. The mask is rasterized once at
-    `master` and averaged down, so every size is the same drawing and the
-    small ones get a great deal of supersampling for free.
-    """
+    """Render one named mark on its tile at each requested size."""
     shapes = MARKS[mark]
     span = MARK_SPAN / 24.0
     origin = (1.0 - MARK_SPAN) / 2.0
@@ -613,8 +473,6 @@ def render(mark, sizes, master=2048):
 
     tile = rasterize([{"d": _rounded_rect_path(TILE_HALF, TILE_RADIUS), "fill": True}], master)
     glyph = rasterize(shapes, master, place)
-    # The mark never leaves the tile by design; intersecting says so rather
-    # than trusting it, and costs one pass.
     for i, value in enumerate(glyph):
         if value and not tile[i]:
             glyph[i] = 0
@@ -635,9 +493,6 @@ def render(mark, sizes, master=2048):
                     row += bytes(4)
                     continue
                 m = min(glyph_cov[y][x], a)
-                # Ink and paper tile the same area and never overlap, so the
-                # colour is their coverage-weighted mean and the alpha is
-                # the tile's own coverage.
                 r = (PAPER[0] * m + INK[0] * (a - m)) / a
                 g = (PAPER[1] * m + INK[1] * (a - m)) / a
                 b = (PAPER[2] * m + INK[2] * (a - m)) / a
@@ -647,19 +502,8 @@ def render(mark, sizes, master=2048):
     return out
 
 
-# ---------------------------------------------------------------------------
-# Containers
-# ---------------------------------------------------------------------------
-
-
 def render_glyph(mark, sizes, colour=PAPER, span=0.46, master=2048):
-    """Render the mark alone, on transparency.
-
-    For Android's adaptive icons, whose foreground layer is composited over
-    a separately declared background and is then masked to whatever shape
-    the launcher prefers -- so the glyph has to sit well inside the frame,
-    which `span` (a fraction of the canvas) is for.
-    """
+    """Render the mark alone, on transparency."""
     unit = span / 24.0
     origin = (1.0 - span) / 2.0
 
@@ -734,11 +578,7 @@ def icns(images):
 
 
 def svg(mark, size=24):
-    """The mark on its own, as an SVG document.
-
-    No tile and no colour: `currentColor` means one file serves a light
-    interface, a dark one, and a README that does not know which.
-    """
+    """The mark on its own, as an SVG document."""
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
         f'width="{size}" height="{size}" fill="none" stroke="currentColor" '
