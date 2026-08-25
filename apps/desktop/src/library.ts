@@ -35,7 +35,6 @@ export async function renderLibrary(): Promise<void> {
   renderShelves(data);
 }
 
-/** Whether the "Where Den looked" list was left open. */
 let whereOpen = false;
 
 function searchAgainButton(): HTMLButtonElement {
@@ -47,16 +46,12 @@ function searchAgainButton(): HTMLButtonElement {
 
 function renderRetroArchNotice(status: RetroArchStatus): void {
   const notice = $<HTMLElement>("retroarch-notice");
-  // A re-render replaces every node, which drops focus to <body> and folds
-  // the disclosure shut under whoever was reading it. Both are put back.
   const hadFocus = notice.contains(document.activeElement)
     ? (document.activeElement as HTMLElement).textContent
     : null;
   notice.replaceChildren();
   notice.hidden = status.available && !status.chosen;
 
-  // A choice that works still has to be undoable, or picking one is a
-  // one-way door: the search never runs again, however the machine changes.
   if (status.available) {
     if (!status.chosen) return;
     const row = el("div", "row");
@@ -75,9 +70,6 @@ function renderRetroArchNotice(status: RetroArchStatus): void {
   );
   if (status.problem) notice.appendChild(el("p", "quiet", status.problem));
 
-  // The search cannot cover every place an emulator might be. A person
-  // looking at their own filesystem can, so the way out is always offered
-  // rather than left for them to find out about.
   const actions = el("div", "row");
   const choose = el("button", "primary", "Choose RetroArch…");
   choose.type = "button";
@@ -111,7 +103,6 @@ function renderRetroArchNotice(status: RetroArchStatus): void {
   restoreFocus(notice, hadFocus);
 }
 
-/** Put focus back on the control with the same label, after a re-render. */
 function restoreFocus(within: HTMLElement, label: string | null): void {
   if (!label) return;
   for (const node of within.querySelectorAll<HTMLElement>("button, summary")) {
@@ -122,20 +113,16 @@ function restoreFocus(within: HTMLElement, label: string | null): void {
   }
 }
 
-/** Point Den at a RetroArch by hand. */
 export async function pickRetroArch(): Promise<void> {
   try {
     const status = await invoke<RetroArchStatus>("choose_retroarch");
     if (status.available) toast(`RetroArch: ${status.path}`);
-    // renderLibrary draws the notice from the same answer, so drawing it
-    // here as well would only make the live region speak twice.
     await renderLibrary();
   } catch (error) {
     toast(String(error));
   }
 }
 
-/** Hand the choice back to the automatic search. */
 async function resetRetroArch(): Promise<void> {
   try {
     await invoke<RetroArchStatus>("clear_retroarch");

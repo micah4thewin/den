@@ -1,32 +1,21 @@
-//! The DAT index: SHA-1 hashes to exact game names, the No-Intro/Redump
-//! posture. Den ships a tiny bundled sample and loads real databases as a
-//! plain TSV (`sha1`, `title`, `system`), one entry per line, `#` comments.
-
 use crate::hash;
 use crate::System;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-/// One hash-to-name mapping from a database.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Entry {
-    /// The SHA-1 of the file this entry names, as lowercase hex.
     pub sha1: String,
-    /// The exact title the database gives it.
     pub title: String,
-    /// The system label as the database spells it.
     pub system: String,
 }
 
-/// An immutable hash lookup table.
 #[derive(Debug, Clone, Default)]
 pub struct Index {
     entries: HashMap<String, Entry>,
 }
 
-/// The bundled sample: a few entries that match the corpus fixtures, so
-/// the hash path of intake is exercised without any download.
 pub fn bundled() -> Index {
     let mut index = Index::default();
     for (sha1, title, system) in [
@@ -59,7 +48,6 @@ pub fn bundled() -> Index {
 }
 
 impl Index {
-    /// Load a TSV database: `sha1<TAB>title<TAB>system`, `#` comments.
     pub fn load_tsv(path: &Path) -> std::io::Result<Index> {
         let text = fs::read_to_string(path)?;
         let mut index = Index::default();
@@ -88,34 +76,27 @@ impl Index {
         Ok(index)
     }
 
-    /// Look a SHA-1 up; returns the exact name if the database has it.
     pub fn lookup(&self, sha1: &str) -> Option<&Entry> {
         self.entries.get(sha1)
     }
 
-    /// How many entries are loaded.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
-    /// Whether the index is empty.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
-    /// Iterate over every entry (for arcade-set detection and reporting).
     pub fn entries(&self) -> impl Iterator<Item = &Entry> {
         self.entries.values()
     }
 
-    /// Look a file up by its hash, returning the entry if found.
     pub fn lookup_file(&self, path: &Path) -> std::io::Result<Option<&Entry>> {
         let sha1 = hash::sha1_file(path)?;
         Ok(self.lookup(&sha1))
     }
 
-    /// Resolve a system name from the database to our enum. Exact match
-    /// on the simple labels Den writes, plus the common aliases.
     pub fn system_of(entry: &Entry) -> Option<System> {
         let name = entry.system.trim().to_ascii_lowercase();
         Some(match name.as_str() {

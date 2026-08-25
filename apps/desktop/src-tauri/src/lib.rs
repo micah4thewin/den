@@ -1,10 +1,3 @@
-//! The Den shell (Tauri v2), on desktop.
-//!
-//! A thin typed IPC layer over `den-core`. The shell depends on `den-core`
-//! and nothing below it. Every command turns a library operation into a
-//! serializable answer; the UI holds no file handles and never touches the
-//! filesystem directly.
-
 mod commands;
 
 use std::sync::Mutex;
@@ -12,7 +5,6 @@ use std::sync::Mutex;
 use den_core::Den;
 use tauri::Manager;
 
-/// The one place application state lives: the opened library.
 struct AppState {
     den: Mutex<Den>,
 }
@@ -30,7 +22,6 @@ fn with_den<T>(
     f(&den)
 }
 
-/// Start the shell.
 pub fn run() {
     env_logger::init();
 
@@ -43,11 +34,6 @@ pub fn run() {
                     log::error!("{e}");
                     std::process::exit(1);
                 });
-            // Only Tauri knows where this platform's bundle put its
-            // resources, so the directory is asked for here and handed down
-            // rather than guessed at by a crate that has never heard of an
-            // application bundle. The runner looks for the runtime staged by
-            // tools/bundle_runtime.py inside it.
             match app.path().resource_dir() {
                 Ok(dir) => den.set_runtime_dir(Some(dir)),
                 Err(e) => log::warn!("no resource directory: {e}"),

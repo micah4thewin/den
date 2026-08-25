@@ -1,10 +1,3 @@
-/* Reset, typography, and the control primitives everything else reuses.
- *
- * The interface has exactly three materials: a raised control that invites a
- * press, a sunken well that invites typing, and flat paper that invites
- * reading. Anything drawn below builds from those three and nothing else.
- */
-
 *,
 *::before,
 *::after {
@@ -12,7 +5,7 @@
 }
 
 html {
-  /* Every length below is em/rem, so this one line is the zoom control. */
+
   font-size: calc(15px * var(--ui-scale));
   -webkit-text-size-adjust: 100%;
   height: 100%;
@@ -56,8 +49,6 @@ a {
 
 a:hover { text-decoration-color: var(--text-1); }
 
-/* ---- scrollbars: present when used, gone when not ------------------- */
-
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--edge) transparent;
@@ -80,14 +71,8 @@ a:hover { text-decoration-color: var(--text-1); }
 ::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--text-3); }
 ::-webkit-scrollbar-corner { background: transparent; }
 
-/* ---- utilities ------------------------------------------------------- */
-
 .hidden { display: none !important; }
 
-/* The `hidden` attribute is the platform's own way of saying "not now", and
- * any component that sets its own `display` silently outranks the browser's
- * one-word rule for it. Saying it here, once, with the weight the attribute
- * was always meant to have, is cheaper than remembering per component. */
 [hidden] { display: none !important; }
 
 .spacer { flex: 1 1 auto; }
@@ -103,7 +88,6 @@ a:hover { text-decoration-color: var(--text-1); }
   font-variant-ligatures: none;
 }
 
-/* Status is words, boxed -- never a colour (plan §12.5). */
 .error {
   color: var(--text-1);
   font-weight: var(--w-bold);
@@ -121,8 +105,6 @@ a:hover { text-decoration-color: var(--text-1); }
   flex-wrap: wrap;
 }
 
-/* ---- focus ----------------------------------------------------------- */
-
 :focus { outline: none; }
 
 :focus-visible {
@@ -130,8 +112,6 @@ a:hover { text-decoration-color: var(--text-1); }
   outline-offset: 2px;
   border-radius: var(--r-1);
 }
-
-/* ---- controls: the raised material ----------------------------------- */
 
 button,
 input,
@@ -174,8 +154,6 @@ button:hover:not(:disabled),
   transform: translateY(-1px);
 }
 
-/* The press is the whole point of the material: the control sinks into the
- * surface it was standing on. */
 button:active:not(:disabled),
 .btn:active:not(:disabled) {
   box-shadow: var(--press-1);
@@ -192,8 +170,6 @@ button:disabled,
   background: var(--sunken);
 }
 
-/* A control that is on stays pressed in. Weight and depth say so together,
- * because depth alone does not survive a greyscale print. */
 button[aria-pressed="true"],
 button.on {
   box-shadow: var(--press-1);
@@ -208,8 +184,6 @@ button.on:hover {
   transform: none;
 }
 
-/* Primary: the one action a panel exists for. Inverted rather than
- * coloured, which is the only emphasis greyscale has left. */
 button.primary {
   background: var(--solid);
   color: var(--text-on-solid);
@@ -227,8 +201,6 @@ button.primary:disabled {
   color: var(--text-1);
 }
 
-/* Ghost: reads as a label until pointed at. For the actions that should
- * not compete with the writing. */
 button.ghost {
   background: transparent;
   box-shadow: none;
@@ -243,18 +215,12 @@ button.ghost:hover:not(:disabled) {
 
 button.ghost:active:not(:disabled) { box-shadow: var(--press-1); }
 
-/* A glyph inside a labelled control. An inline SVG with a viewBox and no
- * intrinsic size lays out at zero in a flex row, so a button that prepends
- * one gets a label and an invisible sibling unless it is sized here. In `em`,
- * so the glyph tracks whatever size the control is set to. */
 button svg.icon,
 .btn svg.icon {
   width: 1.05em;
   height: 1.05em;
   flex: 0 0 auto;
 }
-
-/* ---- icon buttons ---------------------------------------------------- */
 
 .icon-btn {
   width: 2.1rem;
@@ -285,8 +251,6 @@ button svg.icon,
   height: 0.9rem;
 }
 
-/* Strokes scale with the glyph rather than being baked per icon, so an
- * icon stays a hairline at any zoom. */
 svg.icon {
   fill: none;
   stroke: currentColor;
@@ -294,8 +258,6 @@ svg.icon {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-
-/* ---- inputs: the sunken material ------------------------------------- */
 
 input[type="text"],
 input[type="password"],
@@ -329,8 +291,7 @@ select {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 2em;
-  /* The chevron is drawn from the text colour so it follows the theme; a
-   * data: URI would have to be re-encoded per mode. */
+
   background-image:
     linear-gradient(45deg, transparent 50%, currentColor 50%),
     linear-gradient(135deg, currentColor 50%, transparent 50%);

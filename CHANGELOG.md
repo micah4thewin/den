@@ -78,6 +78,11 @@ the build plan's milestones, not semver.
   and for the glue object and its sessions (`crates/den-core/tests`).
 
 ### Fixed
+- **The report card broke its own vocabulary.** The eight promised words are
+  lowercase — `added`, `duplicate`, `repaired` — and the pills and tally said
+  `Added`, `Duplicate`, `Repaired`, because the serialized variant name leaked
+  through as the word. The word is lowercase everywhere now, and reports
+  already saved in the old capitalized form still read back.
 - **The pad was plugged in and the game could not see it.** Den handed
   RetroArch the kernel's `jsN` number as `input_playerN_joypad_index`, but
   RetroArch's udev joypad driver fills its slots densely from 0 in its own
@@ -263,10 +268,13 @@ the build plan's milestones, not semver.
   ship (lockbox's whiteboard, not Den's), and `index.html` had no icon link.
 
 ### Changed
-- `[lints] workspace = true` in every crate, so the `unsafe_code = "deny"` and
-  `missing_docs` the workspace already declared actually apply. Public items
-  are documented and the workspace is `rustfmt`-clean and clippy-clean at
-  `-D warnings`.
+- **The depth scale is softer.** The shadows and highlights that make a
+  control read as raised or pressed are quieter now — smaller glow offsets,
+  a lighter shade in light mode, a fainter glow in dark — so the surfaces
+  keep their vocabulary (lift, press, seam) without the moulded look.
+- `[lints] workspace = true` in every crate, so the `unsafe_code = "deny"`
+  the workspace already declared actually applies. The workspace is
+  `rustfmt`-clean and clippy-clean at `-D warnings`.
 - `.gitignore` no longer ignores `src-tauri/tauri.conf.json` (as a "secret") or
   `src-tauri/icons/`, both of which are committed and the second of which the
   brand check verifies.

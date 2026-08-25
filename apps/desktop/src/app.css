@@ -1,24 +1,9 @@
-/* Den desktop layout.
- *
- * Greyscale by rule. The chrome has no accent colour anywhere, so the only
- * colour on screen is box art itself, sitting on flat paper like prints in
- * a frame shop. Intake status is words in sunken wells; a long operation
- * breathes instead of spinning; emphasis is inversion.
- *
- * Three materials only, from base.css: raised is what you press, sunken is
- * what you drop into or read a result from, flat is the shelf the games sit
- * on.
- */
-
-/* ---- shell ------------------------------------------------------------ */
-
 .shell {
   display: flex;
   height: 100vh;
   background: var(--canvas);
 }
 
-/* The sidebar is a raised island of systems, not a drawn menu. */
 .sidebar {
   flex: 0 0 14.5rem;
   display: flex;
@@ -86,8 +71,6 @@
   word-break: break-all;
 }
 
-/* ---- main -------------------------------------------------------------- */
-
 .main {
   flex: 1 1 auto;
   display: flex;
@@ -121,9 +104,6 @@
 
 .screen-head .spacer { flex: 1 1 auto; }
 
-/* A standing notice: something about this machine, not about one action, so
- * it is a sunken well you read rather than a control you press. Words and
- * depth carry it -- there is no colour to spend on a warning. */
 .notice {
   display: flex;
   flex-direction: column;
@@ -165,8 +145,6 @@
 
 .play-row .play-note { align-self: center; }
 
-/* ---- library ------------------------------------------------------------ */
-
 .row-band { display: flex; flex-direction: column; gap: var(--gap-3); }
 
 .section-label {
@@ -183,7 +161,6 @@
   gap: var(--gap-3);
 }
 
-/* A game tile is flat paper: art above, a quiet word below. */
 .tile {
   display: flex;
   flex-direction: column;
@@ -227,7 +204,6 @@
   display: block;
 }
 
-/* A tile with no art still reads: the title sits on the quiet tile. */
 .tile .art .no-art {
   padding: var(--gap-3);
   font-family: var(--font-display);
@@ -251,8 +227,6 @@
   font-size: 0.74rem;
   color: var(--text-3);
 }
-
-/* ---- game --------------------------------------------------------------- */
 
 .game-layout {
   display: grid;
@@ -299,7 +273,6 @@
   font-size: 0.85rem;
 }
 
-/* The play button is the one solid thing on the page. */
 .play-row { display: flex; gap: var(--gap-2); flex-wrap: wrap; }
 
 .game-meta .field {
@@ -321,8 +294,6 @@
   font-size: 0.82rem;
   color: var(--text-2);
 }
-
-/* ---- intake -------------------------------------------------------------- */
 
 .dropzone {
   flex: 1 1 auto;
@@ -372,7 +343,6 @@
   border-bottom: 1px solid var(--edge);
 }
 
-/* The tally is the report in one line: the same words, counted. */
 .report-tally {
   display: flex;
   flex-wrap: wrap;
@@ -399,9 +369,6 @@
 
 .report-entry:last-child { border-bottom: none; }
 
-/* A common width, so the filenames start on one line down the card and the
- * eye can run the words on their own. The two long words grow past it rather
- * than being cut. */
 .report-entry .word {
   flex: 0 0 auto;
   min-width: 5.4rem;
@@ -429,8 +396,6 @@
   color: var(--text-2);
 }
 
-/* ---- controllers --------------------------------------------------------- */
-
 .pad-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
@@ -449,7 +414,6 @@
 
 .pad-card .pad-name { font-weight: var(--w-bold); }
 
-/* Which player a pad answers for: a choice, so it looks like one. */
 .pad-assign {
   display: flex;
   align-items: center;
@@ -463,14 +427,11 @@
 
 .pad-assign select { width: auto; flex: 1 1 auto; }
 
-/* The keyboard is a card like a pad is, because to somebody deciding how to
- * play it is the same kind of thing: a way to hold the game. */
 .keyboard-card { grid-column: 1 / -1; }
 
 .keymap {
   display: grid;
-  /* Pairs: what it does, then the key. Several pairs across when there is
-   * room, so the whole scheme is one glance rather than a scroll. */
+
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
   gap: var(--gap-1) var(--gap-5);
   margin: var(--gap-2) 0 0;
@@ -488,8 +449,6 @@
   margin: 0;
 }
 
-/* The gap between the action and its key is drawn rather than left to the
- * eye, the way a table of contents does it. */
 .keymap .lead {
   flex: 1 1 auto;
   border-bottom: 1px dotted var(--edge);
@@ -498,13 +457,6 @@
 
 .keymap dd { margin: 0; }
 
-/* ---- toast --------------------------------------------------------------- */
-
-/* Anchored to the bottom-right corner rather than centred, so it enters with
- * `settle-in` -- a plain rise. The family's `toast-in` ends at
- * `translate(-50%, 0)`, which centres a toast that was laid out from the
- * middle and shunts one laid out from a corner half its own width sideways,
- * permanently, because the entrance carries a fill mode. */
 .toast {
   position: fixed;
   bottom: var(--gap-4);

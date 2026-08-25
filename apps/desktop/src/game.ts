@@ -14,7 +14,6 @@ export async function openGame(id: number): Promise<void> {
   }
 }
 
-/** Why Play will not start this game, or null when it will. */
 function playBlockedBecause(
   view: GameView,
 ): { reason: string; choose: boolean } | null {
@@ -25,9 +24,6 @@ function playBlockedBecause(
     return { reason: "RetroArch was not found.", choose: true };
   }
   if (view.core.installed === false) {
-    // RetroArch is here; the core for this system is not. Said in the same
-    // place and the same voice, because to somebody holding a controller it
-    // is the same problem: this game will not start yet.
     const named = view.core.name || "the";
     return {
       reason:
@@ -54,10 +50,6 @@ function renderGame(view: GameView): void {
   const play = el("button", "primary", "Play");
   const playIcon = icon("play");
   if (playIcon) play.prepend(playIcon);
-  // Say it before the press, not after it. A button that looks ready and then
-  // answers with an error is the interface withholding what it already knew.
-  // One reason, in one place, so the button and the sentence beside it can
-  // never disagree about why it will not start.
   const blocked = playBlockedBecause(view);
   play.disabled = blocked !== null;
   play.addEventListener("click", () => {
@@ -72,8 +64,6 @@ function renderGame(view: GameView): void {
   });
   playRow.appendChild(play);
   if (blocked) {
-    // The reason is tied to the button, not merely placed near it, so a
-    // screen reader announces why it is disabled rather than just that it is.
     const note = el("span", "quiet play-note", blocked.reason);
     note.id = `play-reason-${view.game.id}`;
     play.setAttribute("aria-describedby", note.id);
@@ -84,7 +74,6 @@ function renderGame(view: GameView): void {
       link.addEventListener("click", () => {
         void (async () => {
           await pickRetroArch();
-          // Re-read the screen so the button comes back enabled.
           await openGame(view.game.id);
         })();
       });

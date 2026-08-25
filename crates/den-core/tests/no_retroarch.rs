@@ -1,18 +1,9 @@
-//! What a launch does on a machine with no RetroArch on it.
-//!
-//! Its own test binary, because it sets `RETROARCH` -- which is
-//! process-global -- to hold the answer still. Without that this test would
-//! either launch a real emulator fullscreen on a developer's machine or pass
-//! for the wrong reason on a runner that has none.
-
 use den_core::Den;
 use std::fs;
 
 #[test]
 fn a_launch_with_no_emulator_says_where_it_looked_and_records_nothing() {
     let tmp = tempfile::tempdir().unwrap();
-    // Points at nothing, deliberately: an explicit setting that is wrong
-    // should be named rather than quietly ignored.
     let missing = tmp.path().join("no-retroarch-here");
     std::env::set_var("RETROARCH", &missing);
 
@@ -46,8 +37,6 @@ fn a_launch_with_no_emulator_says_where_it_looked_and_records_nothing() {
     let err = den.launch(game.id).unwrap_err().to_string();
     assert!(err.contains("RETROARCH"), "unhelpful message: {err}");
 
-    // A refused launch is not a play session: nothing lands in Recent, and
-    // no process is left to reap.
     assert_eq!(den.running_count(), 0);
     assert!(den.db().recent_games(4).unwrap().is_empty());
 

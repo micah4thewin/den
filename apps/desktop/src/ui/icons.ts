@@ -1,18 +1,5 @@
-// The icon set.
-//
-// Every glyph is built with createElementNS from a table of path data, not
-// assembled as an HTML string. The paths here are ours and could not carry
-// anything hostile, but the rule this codebase holds -- nothing sets
-// innerHTML, anywhere -- is only worth having if it has no exceptions to
-// remember. A single helper that always builds nodes is also what makes an
-// icon safe to hand a caller that got its name from a plugin.
-//
-// One geometry for all of them: a 24x24 box, stroked rather than filled,
-// with the weight set in CSS so a glyph stays a hairline at any zoom.
-
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** One primitive inside an icon. */
 type Shape = [tag: string, attrs: Record<string, string | number>];
 
 const p = (d: string): Shape => ["path", { d }];
@@ -21,22 +8,9 @@ const rect = (x: number, y: number, width: number, height: number, rx = 2): Shap
   "rect",
   { x, y, width, height, rx },
 ];
-// A handful of emblems are too small to survive being outlined -- a play
-// triangle at 16px closes up into a blob. Those are filled.
 const solid = (d: string): Shape => ["path", { d, fill: "currentColor", stroke: "none" }];
 
 const ICONS: Record<string, Shape[]> = {
-  // The brand mark.
-  //
-  // The same path data tools/brand.py rasterizes onto the application icon,
-  // at the same 2.0 weight, so the mark on the library and the mark in the
-  // dock are one drawing rather than two that resemble each other.
-  // tools/check_brand.py fails the build if they drift.
-  //
-  // Its siblings live in lockbox (brandLockbox) and hearth (brandHearth) and
-  // are built the same way: a container holding one emblem. A box with a
-  // keyhole there; an arch with a fire there; a CRT with a play triangle
-  // here.
   brandDen: [
     ["path", {
       d: "M 5 7 H 19 A 2 2 0 0 1 21 9 V 16 "
@@ -59,7 +33,6 @@ const ICONS: Record<string, Shape[]> = {
   chevronRight: [p("m9 18 6-6-6-6")],
   back: [p("M19 12H5"), p("m12 19-7-7 7-7")],
 
-  // den-specific
   play: [solid("M8 5.5v13l11-6.5z")],
   folder: [
     p("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"),
@@ -111,13 +84,7 @@ const ICONS: Record<string, Shape[]> = {
   ],
 };
 
-/** Build an SVG node for a named icon, or null if the name is unknown. */
 export function icon(name: string): SVGSVGElement | null {
-  // An own-property check, not a truthiness one: a name like "constructor"
-  // or "toString" reaches Object.prototype and would sail past `if (!shapes)`
-  // before failing on the loop below. The point of this function is that a
-  // name from anywhere is safe to hand it. Spelled the long way because the
-  // WebViews this ships inside predate `Object.hasOwn`.
   if (!Object.prototype.hasOwnProperty.call(ICONS, name)) return null;
   const shapes = ICONS[name];
   if (!shapes) return null;

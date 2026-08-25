@@ -1,7 +1,3 @@
-# The Den workspace: small library crates that build headless in CI, plus a
-# Tauri shell (apps/desktop/src-tauri) that only wires them to the window.
-# The shell is deliberately outside this workspace: Tauri drags in platform
-# WebView dependencies that headless builds should never compile.
 [workspace]
 resolver = "2"
 members = [
@@ -29,25 +25,18 @@ env_logger = "0.11"
 tempfile = "3"
 dirs = "5"
 
-# Identification
 sha1 = "0.10"
 crc32fast = "1"
 
-# Intake. zip is pure Rust (deflate + zipcrypto + AES). 7z is pure Rust
-# (sevenz-rust, decompress only). tar/gz are pure Rust. RAR shells out to the
-# system `unrar` binary because the freeware unrar library is a native C
-# dependency; extraction-only use is licence-compatible with this app.
 zip = { version = "2", default-features = false, features = ["deflate", "aes-crypto"] }
 sevenz-rust = { version = "0.6", default-features = false }
 tar = "0.4"
 flate2 = "1"
 
-# Library
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
-missing_docs = "warn"
 
 [profile.release]
 opt-level = 2

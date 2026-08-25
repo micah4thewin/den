@@ -1,8 +1,3 @@
-//! Shelving: canonical names, hash dedupe, BIOS filing, and _extras.
-//!
-//! Originals (in staging) are read-only here; every copy lands in the
-//! library before the staging copy is considered done.
-
 use crate::identify::{identify, is_disc_system, FileKind, Identification};
 use crate::unpack::{is_disc_ext, is_rider_ext, is_save_ext};
 use crate::util::{clean_title, ext_of, sanitize, stem_of};
@@ -15,8 +10,6 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Shelves leaf files into a library directory, tracking dedupe state for the
-/// duration of one intake run.
 pub struct Shelf<'a> {
     library: PathBuf,
     dat: &'a Index,
@@ -24,21 +17,15 @@ pub struct Shelf<'a> {
     bios: crate::bios::BiosIndex,
     seen_hashes: HashSet<String>,
     shelved: HashMap<String, Shelved>,
-    /// The hashes already in the library when this run started. Read once:
-    /// asking the database per file turned intake into an O(n^2) table scan.
     known_hashes: Option<HashSet<String>>,
 }
 
-/// Where a title ended up, so a rider or a save that names the same game can
-/// be filed beside it rather than in the library-wide `_extras`.
 struct Shelved {
     dir: PathBuf,
     game_id: Option<i64>,
 }
 
 impl<'a> Shelf<'a> {
-    /// A shelf over `library`, naming games from `dat` and recording them in
-    /// `db` when one is given.
     pub fn new(library: &Path, dat: &'a Index, db: Option<&'a Db>) -> Self {
         Shelf {
             library: library.to_path_buf(),
@@ -51,11 +38,8 @@ impl<'a> Shelf<'a> {
         }
     }
 
-    /// Record where a title landed, so its riders and saves can follow it.
     fn remember(&mut self, title: &str, dir: &Path, game_id: Option<i64>) {
         let key = title.to_ascii_lowercase();
-        // A later id is better than none: the same title can be remembered
-        // once as a bare directory and again once the row exists.
         let entry = self.shelved.entry(key).or_insert_with(|| Shelved {
             dir: dir.to_path_buf(),
             game_id: None,
@@ -66,22 +50,15 @@ impl<'a> Shelf<'a> {
         }
     }
 
-    /// Shelve every leaf file, grouping multi-disc sets first. Every input
-    /// file leaves this with exactly one word against it.
     pub fn shelve_all(&mut self, leaves: &[PathBuf]) -> Vec<ReportEntry> {
         let mut entries = Vec::new();
         let mut consumed_cues: HashSet<PathBuf> = HashSet::new();
         let mut groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
-        // Riders and saves are filed last, whatever order they arrived in, so
-        // that the game they belong beside has already claimed its shelf.
         let mut others: Vec<PathBuf> = Vec::new();
         let mut riders: Vec<PathBuf> = Vec::new();
 
         for leaf in leaves {
             let ext = ext_of(leaf);
-            // A BIOS is a BIOS even when it wears a disc extension: every
-            // bundled name ends in `.bin`, which also belongs to Sega CD and
-            // PlayStation.
             let is_bios = self.bios.matches_name(leaf).is_some();
             if is_disc_ext(&ext) && ext != "cue" && !is_bios {
                 groups.entry(disc_key(leaf)).or_default().push(leaf.clone());
@@ -92,8 +69,6 @@ impl<'a> Shelf<'a> {
             }
         }
 
-        // Sets before singles, and both in a settled order, so a report reads
-        // the same way twice over the same drop.
         let mut grouped: Vec<Vec<PathBuf>> = groups.into_values().collect();
         for files in grouped.iter_mut() {
             files.sort();
@@ -116,7 +91,7 @@ impl<'a> Shelf<'a> {
         for leaf in others.into_iter().chain(riders) {
             if ext_of(&leaf) == "cue" {
                 if consumed_cues.contains(&leaf) {
-                    continue; // accounted for with its disc
+                    continue;
                 }
                 entries.push(self.shelve_orphan_cue(&leaf));
             } else {
@@ -228,9 +203,6 @@ impl<'a> Shelf<'a> {
         }
     }
 
-    /// Shelve a multi-disc set into one game directory and build the playlist
-    /// RetroArch swaps discs from. Every disc in the set gets its own word,
-    /// because every disc was its own input file.
     fn shelve_multi_disc(&mut self, files: &[PathBuf]) -> Vec<ReportEntry> {
         let system = disc_system_for(&files[0]);
         let title = disc_title(&files[0]);
@@ -266,9 +238,6 @@ impl<'a> Shelf<'a> {
                 .map(|()| m3u_path)
         };
 
-        // The game is the playlist when there is one; without cues there is
-        // nothing to swap between, so point at the first disc rather than at
-        // a path that was never written.
         let content = playlist
             .clone()
             .unwrap_or_else(|| game_dir.join(file_name_of(&files[0])));
@@ -287,8 +256,6 @@ impl<'a> Shelf<'a> {
                 });
                 continue;
             }
-            // The playlist is the set's own repair rather than any one disc's,
-            // so it is said once, on the first line of the set.
             let mut notes_for_line: Vec<String> = note.into_iter().collect();
             if i == 0 && playlist.is_some() {
                 notes_for_line.push("built multi-disc playlist".to_string());
@@ -345,8 +312,6 @@ impl<'a> Shelf<'a> {
         if let Err(e) = fs::copy(src, &dest) {
             return self.quarantine(src, &e.to_string());
         }
-        // A save that came in with a game is a save of that game: recording it
-        // is what makes the library's Continue row point somewhere.
         let ext = ext_of(src);
         if is_save_ext(&ext) {
             if let (Some(db), Some(id)) = (self.db, game_id) {
@@ -377,8 +342,6 @@ impl<'a> Shelf<'a> {
         fs::copy(src, variants.join(format!("{}.{}", n + 1, file_name))).ok();
     }
 
-    /// Write the game row, returning its id. Without a database this is a
-    /// no-op and intake still shelves the files.
     fn record_game(
         &self,
         title: &str,
@@ -426,7 +389,6 @@ impl<'a> Shelf<'a> {
     }
 }
 
-/// The title for a disc, with any `(Disc N)` marker stripped.
 fn disc_title(path: &Path) -> String {
     let stem = stem_of(path);
     let lower = stem.to_ascii_lowercase();
@@ -438,7 +400,6 @@ fn disc_title(path: &Path) -> String {
     clean_title(&stem)
 }
 
-/// A grouping key: the lower-cased, disc-marker-free title.
 fn disc_key(path: &Path) -> String {
     disc_title(path).to_ascii_lowercase()
 }
@@ -449,15 +410,6 @@ fn file_name_of(src: &Path) -> String {
         .unwrap_or_else(|| "unnamed".to_string())
 }
 
-/// Whether an extension belongs to something that rides along with a game
-/// rather than being one.
-///
-/// The same precedence `identify` uses, and for the same reason: `.md` is
-/// markdown and it is also a Genesis cartridge, and a system claims an
-/// extension before a rider does. This only decides the order files are
-/// filed in -- riders last, so the game they name has already claimed its
-/// shelf -- so disagreeing with `identify` here would misfile a manual, not a
-/// game.
 fn is_rider_first(ext: &str) -> bool {
     if System::from_extension(ext).is_some() {
         return false;
@@ -465,9 +417,6 @@ fn is_rider_first(ext: &str) -> bool {
     is_save_ext(ext) || is_rider_ext(ext)
 }
 
-/// The cue sheet sitting beside a disc image, if its author shipped one.
-/// Matched case-insensitively on both the stem and the extension, because a
-/// set that came out of a zip made on Windows often disagrees with itself.
 fn sibling_cues(disc: &Path) -> Vec<PathBuf> {
     let stem = stem_of(disc).to_ascii_lowercase();
     let dir = disc.parent().unwrap_or_else(|| Path::new("."));

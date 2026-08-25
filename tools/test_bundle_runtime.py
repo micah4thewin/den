@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise tools/bundle_runtime.py end to end, with a stand-in RetroArch.
-
-    python3 tools/test_bundle_runtime.py
-
-Nothing here touches the network or a real RetroArch: it plants a script that
-answers to the name, then checks that every way of staging one lands a
-runnable binary where den-runner looks for it. The download path is driven
-against a local server, so the hash check is exercised without depending on
-anybody's buildbot being up.
-"""
+"""Exercise tools/bundle_runtime.py end to end, with a stand-in RetroArch."""
 
 import http.server
 import json
@@ -104,7 +95,6 @@ def test_from_archive_zip(tmp):
     result = run(["--from-archive", archive, "--into", dest])
     binary = staged_binary(dest)
     check("--from-archive unpacks a zip", binary is not None, result.stderr)
-    # The wrapper directory inside the zip is lifted away.
     check(
         "  and lifts the wrapper directory",
         binary == os.path.join(dest, "retroarch"),
@@ -113,12 +103,7 @@ def test_from_archive_zip(tmp):
 
 
 def test_from_archive_wrapper_with_siblings(tmp):
-    """The shape a real build actually has: a wrapper directory, plus debris.
-
-    This is the case the destination's own committed README used to break:
-    with anything else present, the wrapper was never lifted and the binary
-    landed where den-runner does not look.
-    """
+    """The shape a real build actually has: a wrapper directory, plus debris."""
     src = os.path.join(tmp, "wrapper-src", "RetroArch-Linux-x86_64")
     plant_retroarch(src)
     plant_cores(os.path.join(src, "cores"))
@@ -130,7 +115,6 @@ def test_from_archive_wrapper_with_siblings(tmp):
             os.path.join(src, "cores", f"mesen_libretro{ext}"),
             f"RetroArch-Linux-x86_64/cores/mesen_libretro{ext}",
         )
-        # What a zip built on macOS carries alongside.
         zf.writestr("__MACOSX/._retroarch", b"junk")
 
     dest = os.path.join(tmp, "staged-wrapper-dir")
@@ -205,19 +189,13 @@ def platform_key():
 
 
 def test_manifest_download(tmp):
-    """The download path, its hash check, and its refusal to trust an unpinned file.
-
-    Driven against a local server and a throwaway manifest: the tracked
-    `tools/runtime-manifest.json` is never written to, so an interrupted run
-    cannot leave the repository dirty.
-    """
+    """The download path, its hash check, and its refusal to trust an unpinned file."""
     served = os.path.join(tmp, "served")
     os.makedirs(served, exist_ok=True)
     payload = os.path.join(served, "RetroArch.zip")
     src = os.path.join(tmp, "ra-served", "RetroArch-Linux-x86_64")
     plant_retroarch(src)
     with zipfile.ZipFile(payload, "w") as zf:
-        # A wrapper directory, as every real build has.
         zf.write(os.path.join(src, "retroarch"), "RetroArch-Linux-x86_64/retroarch")
 
     handler = lambda *a, **k: http.server.SimpleHTTPRequestHandler(*a, directory=served, **k)
@@ -250,7 +228,6 @@ def test_manifest_download(tmp):
         result = run(["--from-manifest", "--into", dest, "--manifest", manifest_path, "--record"])
         check("--record pins the hash and stages", staged_binary(dest) is not None, result.stderr)
         check("  and writes the hash into the manifest", bool(read_manifest()), str(read_manifest()))
-        # The wrapper directory has to be lifted, or den-runner never sees it.
         check(
             "  and the binary lands where den-runner looks",
             staged_binary(dest) == os.path.join(dest, "retroarch"),
@@ -268,7 +245,6 @@ def test_manifest_download(tmp):
             result.stdout + result.stderr,
         )
 
-        # --record must not quietly replace a hash somebody pinned by hand.
         result = run(
             ["--from-manifest", "--into", dest, "--manifest", manifest_path, "--record"], expect=1
         )

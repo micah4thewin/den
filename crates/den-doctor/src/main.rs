@@ -1,13 +1,3 @@
-//! `den-doctor` — say what Den can and cannot find on this machine.
-//!
-//! When somebody reports that Den cannot find RetroArch, the useful reply is
-//! not a guess, it is this: every place Den looked, what was actually at each
-//! one, and which answer it settled on. It is a separate binary from the shell
-//! on purpose — it builds headless, so it runs on a machine that cannot build
-//! a WebView, and it can be run without rebuilding the application.
-//!
-//!     cargo run -p den-doctor
-
 use den_core::Den;
 use den_ident::System;
 use std::path::{Path, PathBuf};
@@ -26,9 +16,6 @@ fn main() {
     );
     println!("  library       {}", library.display());
 
-    // A diagnostic reports; it does not create things. Opening a library
-    // makes one, so a mistyped path would leave an empty library behind and
-    // report cheerfully on it.
     let exists = library.join("library.db").is_file();
     if !exists {
         println!("  (no library here yet — it is made on first run)");
@@ -41,7 +28,6 @@ fn main() {
         }
     };
     if !exists {
-        // Put back what opening it just made.
         let _ = std::fs::remove_file(library.join("library.db"));
         let _ = std::fs::remove_file(library.join("library.db-wal"));
         let _ = std::fs::remove_file(library.join("library.db-shm"));
@@ -104,8 +90,6 @@ fn main() {
             existing += 1;
             "there, but not executable"
         };
-        // Quiet about the many paths that simply are not there; loud about
-        // anything that exists, because that is where a surprise hides.
         if note != "-" {
             println!("  {note:<26} {place}");
         }
@@ -144,8 +128,6 @@ fn main() {
     if !status.available {
         println!("\nNothing here is fatal: Den shelves and names games without RetroArch.");
         if status.chosen {
-            // The search is switched off while a chosen path stands, so
-            // "install RetroArch" would not help until this is dealt with.
             println!(
                 "A RetroArch was chosen by hand and no longer works, and while that\n\
                  stands Den does not search at all. Either choose another —\n\
@@ -161,7 +143,6 @@ fn main() {
     }
 }
 
-/// Which of the cores Den would ask for are actually installed.
 fn report_cores(den: &Den, retroarch: &Path) {
     println!("\nRetroArch's own configuration");
     match den_runner::user_config(retroarch) {

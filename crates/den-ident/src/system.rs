@@ -1,36 +1,19 @@
-/// The systems Den shelves games under, with the core the runner will pick
-/// by default. Names are the words the interface shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum System {
-    /// Nintendo Entertainment System / Famicom.
     Nes,
-    /// Super Nintendo Entertainment System / Super Famicom.
     Snes,
-    /// Sega Genesis / Mega Drive.
     Genesis,
-    /// Sega CD / Mega CD.
     SegaCd,
-    /// Sega 32X.
     Sega32x,
-    /// Nintendo 64.
     N64,
-    /// Sony PlayStation.
     Ps1,
-    /// Game Boy.
     Gb,
-    /// Game Boy Color.
     Gbc,
-    /// Game Boy Advance.
     Gba,
-    /// Arcade sets (FinalBurn Neo and friends), kept zipped.
     Arcade,
-    /// MS-DOS, run through DOSBox.
     Dos,
-    /// Sony PlayStation 2. Needs an external emulator profile.
     Ps2,
-    /// Nintendo GameCube. Needs an external emulator profile.
     Gamecube,
-    /// Nintendo Wii. Needs an external emulator profile.
     Wii,
 }
 
@@ -53,7 +36,6 @@ impl System {
         System::Wii,
     ];
 
-    /// The human word for this system.
     pub fn name(self) -> &'static str {
         match self {
             System::Nes => "NES",
@@ -74,7 +56,6 @@ impl System {
         }
     }
 
-    /// File extensions that most commonly carry this system's games.
     pub fn extensions(self) -> &'static [&'static str] {
         match self {
             System::Nes => &["nes", "fds"],
@@ -95,7 +76,6 @@ impl System {
         }
     }
 
-    /// Resolve an extension (without the dot, lower-cased) to a system.
     pub fn from_extension(ext: &str) -> Option<System> {
         let ext = ext.to_ascii_lowercase();
         System::ALL
@@ -103,13 +83,10 @@ impl System {
             .find(|system| system.extensions().contains(&ext.as_str()))
     }
 
-    /// Resolve the exact interface name (`name()`'s output) back to a system.
     pub fn from_name(name: &str) -> Option<System> {
         System::ALL.into_iter().find(|system| system.name() == name)
     }
 
-    /// The libretro core Den prefers for this system: the accuracy-per-watt
-    /// picks from the build plan so one library behaves on a Pi and a desktop.
     pub fn default_core(self) -> &'static str {
         match self {
             System::Nes => "mesen",

@@ -1,43 +1,5 @@
 #!/usr/bin/env python3
-"""Put a RetroArch inside Den, so a built Den needs nothing installed.
-
-    python3 tools/bundle_runtime.py                     # from this machine
-    python3 tools/bundle_runtime.py --from-archive X    # from a download
-    python3 tools/bundle_runtime.py --check             # say what it would do
-
-What it writes is `apps/desktop/src-tauri/resources/runtime/`, which
-`tauri.conf.json` ships as a bundle resource; the shell hands that directory
-to `den-runner` as `DEN_RUNTIME_DIR`, and `Runner::locate` prefers it over
-anything installed on the machine. A build with a runtime staged is
-self-contained; a build without one falls back to the system, so this script
-is never required to get a working Den.
-
-Three sources, in the order you should prefer them:
-
-  --from-archive  A RetroArch you downloaded: an AppImage, a .zip, a .tar.*,
-                  a .7z, or an unpacked directory. This is the one to use for
-                  a release, because those builds carry their own libraries
-                  and so run on a machine that is not yours.
-
-  --from-system   The RetroArch already installed here, found the same way
-                  Den finds it. Immediate and needs no network, but a native
-                  package is linked against this machine's libraries: good
-                  for a build you are going to run yourself, not for one you
-                  are going to hand to somebody else.
-
-  --from-manifest The URLs in tools/runtime-manifest.json. Needs network.
-
-A note on licences, because bundling changes them from somebody else's
-problem into yours. RetroArch is GPLv3: shipping it inside Den is fine --
-Den runs it as a separate process, which is aggregation rather than linking,
-so Den's own MIT terms are unaffected -- but *distributing* that bundle
-carries GPLv3's obligations, including offering the corresponding source.
-The cores are not uniform: mesen, mupen64plus_next and swanstation are GPL,
-mgba is MPL-2.0, and snes9x, genesis_plus_gx and fbneo carry non-commercial
-terms that restrict redistribution. Bundling for yourself is unproblematic.
-Publishing a bundle means reading those terms. This script prints what it
-staged and under what licence so the question is at least visible.
-"""
+"""Put a RetroArch inside Den, so a built Den needs nothing installed."""
 
 import argparse
 import hashlib
@@ -55,7 +17,6 @@ RESOURCES = os.path.join(ROOT, "apps", "desktop", "src-tauri", "resources")
 RUNTIME = os.path.join(RESOURCES, "runtime")
 MANIFEST = os.path.join(ROOT, "tools", "runtime-manifest.json")
 
-# The cores Den asks for by default, and what each one is under.
 CORE_LICENCES = {
     "mesen": "GPLv3",
     "snes9x": "Snes9x (non-commercial)",
@@ -80,9 +41,6 @@ CORE_EXT = {"win32": ".dll", "darwin": ".dylib"}.get(sys.platform, ".so")
 
 def log(message):
     print(message, flush=True)
-
-
-# ---- finding a RetroArch on this machine --------------------------------
 
 
 def system_candidates():
@@ -132,12 +90,7 @@ def system_candidates():
 
 
 def find_system_retroarch():
-    """The RetroArch on this machine, as found -- symlinks left alone.
-
-    `realpath` here would turn the Flatpak and Snap wrappers into
-    `/usr/bin/flatpak` and `/usr/bin/snap`, which behave like RetroArch only
-    because they look at the name they were invoked under.
-    """
+    """The RetroArch on this machine, as found -- symlinks left alone."""
     override = os.environ.get("RETROARCH")
     if override and os.path.isfile(override) and os.access(override, os.X_OK):
         return override
@@ -148,11 +101,7 @@ def find_system_retroarch():
 
 
 def is_a_wrapper(path):
-    """Whether this is a launcher that starts RetroArch rather than RetroArch.
-
-    Copying one into a bundle gets you a file that needs the very thing the
-    bundle exists to avoid needing.
-    """
+    """Whether this is a launcher that starts RetroArch rather than RetroArch."""
     target = os.path.basename(os.path.realpath(path)).lower()
     return target in ("flatpak", "snap")
 
@@ -194,17 +143,12 @@ def find_core_dir(retroarch):
         parent,
     ]
     for candidate in candidates:
-        # It has to hold a core, not merely exist: a fresh install leaves an
-        # empty ~/.config/retroarch/cores that would shadow the real one.
         if os.path.isdir(candidate) and any(
             name.endswith(CORE_EXT) and "_libretro" in name
             for name in os.listdir(candidate)
         ):
             return candidate
     return None
-
-
-# ---- unpacking a download ------------------------------------------------
 
 
 def extract(archive, into):
@@ -214,9 +158,6 @@ def extract(archive, into):
         shutil.copytree(archive, into, dirs_exist_ok=True)
         return
     if lower.endswith(".appimage"):
-        # An AppImage is already one self-contained executable; that is the
-        # whole point of it, so it becomes the binary rather than being
-        # unpacked into pieces.
         os.makedirs(into, exist_ok=True)
         target = os.path.join(into, "retroarch")
         shutil.copy2(archive, target)
@@ -225,8 +166,6 @@ def extract(archive, into):
     if lower.endswith(".zip"):
         with zipfile.ZipFile(archive) as zf:
             zf.extractall(into)
-            # ZipFile.extractall drops the mode bits, so an executable that
-            # went in as one comes out as a plain file.
             for member in zf.infolist():
                 mode = member.external_attr >> 16
                 if mode & 0o111:
@@ -236,13 +175,9 @@ def extract(archive, into):
         return
     if any(lower.endswith(s) for s in (".tar", ".tar.gz", ".tgz", ".tar.xz", ".tar.bz2")):
         with tarfile.open(archive) as tf:
-            # `data` refuses members that escape the destination, absolute
-            # paths, links out of the tree, and setuid bits. Without it,
-            # Python 3.11 trusts the archive completely -- and Python 3.14
-            # changes the default under us.
             try:
                 tf.extractall(into, filter="data")
-            except TypeError:  # Python < 3.11.4 has no filter argument
+            except TypeError:
                 for member in tf.getmembers():
                     if member.name.startswith(("/", "..")) or ".." in member.name.split("/"):
                         raise SystemExit(f"{archive} contains an unsafe path: {member.name}")
@@ -262,18 +197,7 @@ def extract(archive, into):
 
 
 def promote(into):
-    """Lift the binary and everything beside it to the top of `into`.
-
-    den-runner looks for `<dir>/retroarch` and `<dir>/retroarch/retroarch` and
-    stops; it does not go hunting. Almost every published build unpacks into a
-    wrapper directory (`RetroArch-Linux-x86_64/`), and a zip made on macOS
-    adds `__MACOSX/` beside it, so "lift it only if it is the single entry"
-    fails on the normal case -- and worse, fails quietly, leaving a staged
-    tree that looks right to this script and is invisible to Den.
-
-    Whatever directory the binary is in, its contents come up to the top: the
-    libraries and cores that sit beside it have to travel with it.
-    """
+    """Lift the binary and everything beside it to the top of `into`."""
     binary = find_binary(into)
     if not binary:
         return
@@ -285,8 +209,6 @@ def promote(into):
             if os.path.exists(target):
                 shutil.rmtree(target) if os.path.isdir(target) else os.remove(target)
             shutil.move(source, target)
-    # Sweep up what the wrapper left: its own now-empty directory, and the
-    # __MACOSX sidecar any zip built on macOS carries.
     for name in list(os.listdir(into)):
         path = os.path.join(into, name)
         if not os.path.isdir(path):
@@ -302,9 +224,6 @@ def find_binary(root):
             if name in filenames:
                 return os.path.join(dirpath, name)
     return None
-
-
-# ---- staging -------------------------------------------------------------
 
 
 def stage_from_system(dest, want_cores):
@@ -382,11 +301,7 @@ def platform_key():
 
 
 def archive_suffix(url):
-    """The suffix a URL's file has, `.tar.gz` included.
-
-    `os.path.splitext` stops at the last dot, so a tarball comes back as
-    `.gz` and is then handed to the gzip-unaware branch of `extract`.
-    """
+    """The suffix a URL's file has, `.tar.gz` included."""
     name = os.path.basename(url.split("?")[0]).lower()
     for suffix in (".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".7z", ".zip", ".appimage", ".tar"):
         if name.endswith(suffix):
@@ -417,8 +332,6 @@ def stage_from_manifest(dest, want_cores, record, force, manifest_path):
     expected = entry.get("sha256")
     log(f"  fetching {url}")
 
-    # Downloaded outside the staging directory, which is tracked, so a failed
-    # run cannot leave a part-file where a build would find it.
     handle, tmp = tempfile.mkstemp(prefix="den-runtime-", suffix=archive_suffix(url))
     os.close(handle)
     try:
@@ -439,8 +352,6 @@ def stage_from_manifest(dest, want_cores, record, force, manifest_path):
                 "is the right file."
             )
 
-        # Unpack before pinning: a 404 page or a truncated download should
-        # never end up recorded in a tracked file as though it were verified.
         extract(tmp, dest)
         promote(dest)
         binary = find_binary(dest)
@@ -485,10 +396,6 @@ def main():
         return check(args.into, args.manifest)
 
     dest = args.into
-    # A build must never destroy a runtime that was staged on purpose. The
-    # release flow is `--from-archive <portable build>` and then a build; if
-    # the build re-staged from this machine it would silently swap a portable
-    # RetroArch for a natively linked one.
     already = find_binary(dest) if os.path.isdir(dest) else None
     if args.keep_existing and already:
         log(f"Keeping the runtime already staged at {os.path.relpath(already, ROOT)}")
@@ -528,12 +435,7 @@ def main():
 
 
 def clear(dest):
-    """Empty the staging directory, keeping the README that documents it.
-
-    The directory itself is committed with a README in it so that a fresh
-    clone has somewhere for the bundler to look; wiping it wholesale would
-    delete a tracked file every time this ran.
-    """
+    """Empty the staging directory, keeping the README that documents it."""
     if not os.path.isdir(dest):
         return
     for name in os.listdir(dest):

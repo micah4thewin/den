@@ -1,9 +1,3 @@
-// The Den shell: vanilla TypeScript over the thin IPC layer in src-tauri.
-//
-// One rule: no file here ever sets innerHTML. Every node is built with the
-// same createElementNS/createElement discipline as the icon set, so a title
-// that came out of a filename is always text, never markup.
-
 import { refreshControllers } from "./controllers";
 import { $, el, showScreen, toast } from "./dom";
 import { chooseAndIntake, wireDrop } from "./intake";

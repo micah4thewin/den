@@ -1,5 +1,3 @@
-//! The glue object, from the shell's point of view.
-
 use den_core::Den;
 use std::fs;
 
@@ -10,7 +8,6 @@ fn opening_a_library_creates_it() {
     let den = Den::open(&library).unwrap();
     assert!(library.join("library.db").is_file());
     assert_eq!(den.db().game_count().unwrap(), 0);
-    // Opening the same library twice is the normal case, not an error.
     drop(den);
     Den::open(&library).unwrap();
 }
@@ -46,7 +43,6 @@ fn choosing_a_retroarch_that_does_not_work_changes_nothing() {
     let tmp = tempfile::tempdir().unwrap();
     let den = Den::open(&tmp.path().join("den")).unwrap();
 
-    // Nothing chosen to begin with.
     assert!(!den.retroarch_status().chosen);
 
     let nowhere = tmp.path().join("not-a-retroarch");
@@ -55,21 +51,14 @@ fn choosing_a_retroarch_that_does_not_work_changes_nothing() {
         .expect_err("a path that cannot run should be refused");
     assert!(err.to_string().contains("not-a-retroarch"), "{err}");
 
-    // And the refusal left nothing behind: the search is still in charge,
-    // rather than the library now pointing at something that cannot run.
     let status = den.retroarch_status();
     assert!(!status.chosen, "a refused choice was kept anyway");
 
-    // It also survives a reopen, which is where a half-written setting shows.
     drop(den);
     let den = Den::open(&tmp.path().join("den")).unwrap();
     assert!(!den.retroarch_status().chosen);
 }
 
-/// A Flatpak or Snap RetroArch is a symlink to a multiplexer that behaves
-/// like RetroArch only because it looks at the name it was invoked under.
-/// Storing where it points, rather than what was picked, hands Den a
-/// `flatpak` that exits with a usage message while reporting success.
 #[cfg(unix)]
 #[test]
 fn a_chosen_wrapper_is_stored_as_it_was_picked() {
@@ -93,7 +82,6 @@ fn a_chosen_wrapper_is_stored_as_it_was_picked() {
         "the multiplexer was written down instead of the wrapper"
     );
 
-    // And it is still the wrapper after a restart.
     drop(den);
     let den = Den::open(&tmp.path().join("den")).unwrap();
     assert_eq!(den.retroarch_status().path.as_deref(), Some(expected));
@@ -125,7 +113,6 @@ fn a_system_den_cannot_launch_says_so_rather_than_blaming_a_core() {
         "there is no core to be missing when the system cannot be launched"
     );
 
-    // And an ordinary system is not marked unsupported.
     let id = den
         .db()
         .add_game(

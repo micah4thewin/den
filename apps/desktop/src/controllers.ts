@@ -20,8 +20,6 @@ function renderControllers(view: ControllerView): void {
     const card = el("div", "pad-card");
     card.appendChild(el("div", "pad-name", pad.name));
 
-    // A pad arrives already assigned, because a controller you plugged in
-    // should be Player 1 without being asked. This is here to change it.
     const row = el("div", "pad-assign");
     const label = el("label", undefined, "Plays as");
     const select = el("select");
@@ -51,7 +49,6 @@ function renderControllers(view: ControllerView): void {
   renderKeyboard(view.keyboard);
 }
 
-/** The keys Den binds, listed where somebody can read them. */
 function renderKeyboard(keyboard: KeyBinding[]): void {
   const cards = $<HTMLElement>("pad-cards");
   const card = el("div", "pad-card keyboard-card");
@@ -61,8 +58,6 @@ function renderKeyboard(keyboard: KeyBinding[]): void {
   );
   const list = el("dl", "keymap");
   for (const binding of keyboard) {
-    // Each pair in its own row, so the dotted lead runs between the action
-    // and its key rather than across the whole grid.
     const pair = el("div");
     pair.appendChild(el("dt", undefined, binding.action));
     pair.appendChild(el("span", "lead"));

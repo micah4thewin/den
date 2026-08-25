@@ -1,40 +1,3 @@
-/* Design tokens.
- *
- * Two layers, and the split matters:
- *
- *   Seeds     The whole customization surface. A vault's theme.css sets
- *             these and nothing else (plan §12.5), and the shipped values
- *             here are the same ones lockbox-store writes into a new vault,
- *             so the app does not change palette the moment one unlocks.
- *
- *   Semantic  aliases below, pointing at seeds with var(). Components read
- *             only these, so a seed edit reaches every surface without any
- *             stylesheet knowing about a component.
- *
- * Every seed is a literal rather than a colour derived from another with
- * color-mix(): this ships to WKWebView on macOS 10.15 and iOS 13, which
- * predate it, and a palette that silently collapses to nothing there is
- * worse than a longer list here.
- *
- * Greyscale by rule, with one bounded exception. Colour never encodes
- * provenance status -- status is always words (plan §12.5, LIMITATIONS.md)
- * -- so every state must survive being printed in grey. Depth carries what
- * colour would: raised is interactive, sunken is where you type, flat is
- * where you read.
- *
- * The exception is syntax: the `--syn-*` seeds below tint code tokens and
- * the two sides of a diff. That is not a judgement about anything, it is a
- * label for what a run of characters *is*, and it is the one place where a
- * reader is scanning structure rather than reading prose. They are held to
- * three rules. They are desaturated -- calm enough to sit under text for
- * hours, never a highlighter. They keep 4.5:1 against the surface they are
- * drawn on in both modes. And nothing depends on them: every token also
- * carries weight or slant, so code stays legible printed in grey, projected
- * through a bad beamer, or read by someone who does not see the hue.
- */
-
-/* ---- fonts (shared with hearth) ------------------------------------- */
-
 @font-face {
   font-family: "Gilroy";
   src: url("/fonts/Gilroy-Light.woff2") format("woff2"),
@@ -80,13 +43,6 @@
   font-display: swap;
 }
 
-/* Den bundles two faces and asks for no others. The family sheet also
- * carries three handwriting faces for lockbox's whiteboard; Den has no
- * whiteboard, and @font-face rules pointing at files this repository does
- * not ship are six requests that can only 404. */
-
-/* ---- seeds: light ---------------------------------------------------- */
-
 :root {
   color-scheme: light;
   --bg: #e8eaed;
@@ -100,14 +56,11 @@
   --faint: #50565e;
   --line: #d3d7dd;
   --focus: #1b1d20;
-  /* The two halves of a soft-light surface: where it falls away from the
-   * light, and where it catches it. Neumorphism is only these two. */
-  --shade: rgba(157, 165, 176, 0.5);
-  --glow: rgba(255, 255, 255, 0.92);
+  --shade: rgba(157, 165, 176, 0.38);
+  --glow: rgba(255, 255, 255, 0.55);
   --overlay: rgba(226, 229, 233, 0.72);
   --selection: rgba(27, 29, 32, 0.14);
 
-  /* Syntax, light. Muted enough to read as ink with a cast to it. */
   --syn-keyword: #5f5192;
   --syn-type: #2f6a66;
   --syn-def: #35618f;
@@ -122,11 +75,6 @@
   --syn-removed-wash: rgba(143, 63, 58, 0.17);
 }
 
-/* ---- seeds: dark ----------------------------------------------------- */
-
-/* Plain `:root` specificity, so a vault's theme.css -- which loads after
- * this file and uses the same selector -- still wins when the user has not
- * chosen a mode by hand. */
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
@@ -141,12 +89,11 @@
     --faint: #929aa0;
     --line: #303439;
     --focus: #e7eaee;
-    --shade: rgba(0, 0, 0, 0.55);
-    --glow: rgba(255, 255, 255, 0.045);
+    --shade: rgba(0, 0, 0, 0.45);
+    --glow: rgba(255, 255, 255, 0.028);
     --overlay: rgba(14, 16, 18, 0.72);
     --selection: rgba(231, 234, 238, 0.16);
 
-    /* Syntax, dark. Lifted for the darker page, still nothing that glows. */
     --syn-keyword: #b5a4dd;
     --syn-type: #7cc0b7;
     --syn-def: #8ab4e0;
@@ -162,10 +109,6 @@
   }
 }
 
-/* An explicit choice outranks both blocks above and the vault's own, by
- * specificity rather than by order. Picking a mode by hand is a statement
- * about this screen right now, and theme.css cannot know which half of
- * itself the user meant. Leaving the mode on "system" hands control back. */
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #e8eaed;
@@ -179,12 +122,11 @@
   --faint: #50565e;
   --line: #d3d7dd;
   --focus: #1b1d20;
-  --shade: rgba(157, 165, 176, 0.5);
-  --glow: rgba(255, 255, 255, 0.92);
+  --shade: rgba(157, 165, 176, 0.38);
+  --glow: rgba(255, 255, 255, 0.55);
   --overlay: rgba(226, 229, 233, 0.72);
   --selection: rgba(27, 29, 32, 0.14);
 
-  /* Syntax, light. Muted enough to read as ink with a cast to it. */
   --syn-keyword: #5f5192;
   --syn-type: #2f6a66;
   --syn-def: #35618f;
@@ -212,12 +154,11 @@
   --faint: #929aa0;
   --line: #303439;
   --focus: #e7eaee;
-  --shade: rgba(0, 0, 0, 0.55);
-  --glow: rgba(255, 255, 255, 0.045);
+  --shade: rgba(0, 0, 0, 0.45);
+  --glow: rgba(255, 255, 255, 0.028);
   --overlay: rgba(14, 16, 18, 0.72);
   --selection: rgba(231, 234, 238, 0.16);
 
-  /* Syntax, dark. Lifted for the darker page, still nothing that glows. */
   --syn-keyword: #b5a4dd;
   --syn-type: #7cc0b7;
   --syn-def: #8ab4e0;
@@ -232,8 +173,6 @@
   --syn-removed-wash: rgba(224, 144, 138, 0.19);
 }
 
-/* ---- semantic aliases ------------------------------------------------ */
-
 :root {
   --canvas: var(--bg);
   --surface: var(--panel);
@@ -241,38 +180,20 @@
   --ring: var(--focus);
   --text-1: var(--fg);
   --text-2: var(--muted);
-  /*
-   * The three text weights all have to be readable. `--text-3` is the
-   * quietest, used for pane titles, inactive tabs, and the zoom readout --
-   * and it was set to a grey that came out at 2.5:1 on the surfaces it
-   * actually sits on, well under the 4.5:1 that plan §12.6's WCAG 2.2 AA
-   * commitment requires for text this size. It looked like a hierarchy and
-   * read as unreadable. The a11y run in CI found it.
-   *
-   * Quiet now means darker in light mode and lighter in dark mode rather
-   * than lower contrast. If a future value needs checking, the run is
-   * `npm run a11y`.
-   */
   --text-3: var(--faint);
   --text-on-solid: var(--bg);
   --solid: var(--fg);
 }
 
-/* ---- depth ----------------------------------------------------------- */
-
 :root {
-  --lift-1: 2px 2px 5px var(--shade), -2px -2px 5px var(--glow);
-  --lift-2: 4px 4px 10px var(--shade), -3px -3px 9px var(--glow);
-  --lift-3: 8px 8px 22px var(--shade), -6px -6px 18px var(--glow);
-  --lift-4: 14px 18px 44px var(--shade), -10px -10px 30px var(--glow);
-  --press-1: inset 2px 2px 4px var(--shade), inset -2px -2px 4px var(--glow);
-  --press-2: inset 3px 3px 7px var(--shade), inset -3px -3px 7px var(--glow);
-  /* A hairline that reads as a seam in the material rather than a drawn
-   * line: light on top, shadow underneath. */
+  --lift-1: 2px 2px 5px var(--shade), -1px -1px 3px var(--glow);
+  --lift-2: 4px 4px 10px var(--shade), -2px -2px 5px var(--glow);
+  --lift-3: 8px 8px 22px var(--shade), -3px -3px 10px var(--glow);
+  --lift-4: 14px 18px 44px var(--shade), -5px -5px 16px var(--glow);
+  --press-1: inset 2px 2px 4px var(--shade), inset -1px -1px 2px var(--glow);
+  --press-2: inset 3px 3px 7px var(--shade), inset -2px -2px 4px var(--glow);
   --seam: inset 0 1px 0 var(--glow), inset 0 -1px 0 var(--shade);
 }
-
-/* ---- shape, rhythm, motion ------------------------------------------- */
 
 :root {
   --r-1: 6px;
@@ -288,7 +209,6 @@
   --gap-5: 1.5rem;
   --gap-6: 2.25rem;
 
-  /* Calm, not sluggish: everything settles rather than stopping dead. */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
@@ -302,23 +222,15 @@
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace;
   --font-serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
 
-  /* Avenir ships Regular and Bold only; asking for anything between them
-   * gets a synthesized weight that looks smudged at small sizes. */
   --w-normal: 400;
   --w-bold: 700;
 
-  /* The whole interface scales from here (Ctrl +/-/0). */
   --ui-scale: 1;
   --pane-left: 15.5rem;
   --pane-right: 20rem;
-  /* The text column fills its pane unless Settings narrows it. See
-   * ui/prefs.ts, which writes this before the first paint. */
   --measure: 100%;
 }
 
-/* Nothing in a calm interface should move for someone who asked it not to.
- * Durations collapse to instant here rather than being fought with
- * `!important` at every site that animates. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur-1: 1ms;

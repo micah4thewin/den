@@ -4,17 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Den</title>
-  <!-- The same mark tools/brand.py rasterizes onto the application icon.
-       It is drawn in currentColor, which an icon context resolves to the
-       window's own text colour, so one file serves both modes. -->
   <link rel="icon" href="/brand-mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<!--
-  Structure only. Every icon is put in from src/ui/icons.ts rather than
-  inlined here, so one glyph is defined once and a button carries the label
-  a screen reader reads instead of a picture it cannot.
--->
 <body>
   <div class="shell" id="shell">
     <aside class="sidebar" aria-label="Systems">

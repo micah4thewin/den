@@ -1,26 +1,12 @@
 use std::fs;
 use std::path::Path;
 
-/// One player's controls for a session.
 #[derive(Debug, Clone)]
 pub struct PlayerBinding {
-    /// Which player, from 1.
     pub player: usize,
-    /// The joystick index RetroArch should use for them, if a pad is theirs.
     pub joypad_index: Option<usize>,
 }
 
-/// Den's keyboard scheme for player one.
-///
-/// RetroArch has defaults, but nobody can see them, and a launcher whose
-/// answer to "how do I play this" is "read the emulator's settings" has not
-/// answered. These are written into every session and shown on the
-/// Controllers screen, so what the interface says and what the keys do are
-/// the same thing by construction.
-///
-/// The layout is the one an emulator keyboard player expects: the arrow keys
-/// for the pad, the right hand on Z/X/A/S for the face buttons in the shape
-/// they sit on a controller, Enter and Right Shift for Start and Select.
 pub const KEYBOARD_SCHEME: &[(&str, &str, &str)] = &[
     ("up", "up", "Up"),
     ("down", "down", "Down"),
@@ -36,7 +22,6 @@ pub const KEYBOARD_SCHEME: &[(&str, &str, &str)] = &[
     ("select", "rshift", "Right Shift"),
 ];
 
-/// The keys Den binds that are not one player's buttons.
 pub const KEYBOARD_CHROME: &[(&str, &str, &str)] = &[
     ("input_menu_toggle", "f1", "F1"),
     ("input_exit_emulator", "escape", "Escape"),
@@ -45,7 +30,6 @@ pub const KEYBOARD_CHROME: &[(&str, &str, &str)] = &[
     ("input_toggle_fullscreen", "f11", "F11"),
 ];
 
-/// The keys Den sets for a session. Everything else is the person's own.
 const DEN_KEYS: &[&str] = &[
     "video_fullscreen",
     "input_autodetect_enable",
@@ -58,16 +42,8 @@ const DEN_KEYS: &[&str] = &[
     "libretro_directory",
 ];
 
-/// How many players a session is configured for.
 pub const MAX_PLAYERS: usize = 4;
 
-/// Write the private config for one session.
-///
-/// `--config` replaces RetroArch's configuration rather than adding to it, so
-/// this starts from the person's own file and overrides only the handful of
-/// keys Den has an opinion about. Otherwise every launch through Den would
-/// quietly discard their video driver, their pad bindings, their shaders --
-/// everything they set up in RetroArch itself.
 pub(crate) fn write_config(
     path: &Path,
     save_dir: &Path,
@@ -79,7 +55,6 @@ pub(crate) fn write_config(
     let mut content = String::new();
     let overridden = den_keys();
     if let Some(theirs) = inherit.and_then(|p| fs::read_to_string(p).ok()) {
-        content.push_str("# Den session config: their RetroArch settings, then ours.\n");
         for line in theirs.lines() {
             let key = line.split_once('=').map(|(k, _)| k.trim()).unwrap_or("");
             if overridden.iter().any(|k| k == key) {
@@ -90,7 +65,6 @@ pub(crate) fn write_config(
         }
         content.push('\n');
     }
-    content.push_str("# Den, for this session\n");
     content.push_str(&format!(
         "video_fullscreen = \"true\"\n\
          input_autodetect_enable = \"true\"\n\
@@ -107,10 +81,7 @@ pub(crate) fn write_config(
         content.push_str(&format!("libretro_directory = \"{}\"\n", cores.display()));
     }
 
-    // Which pad answers for which player. RetroArch's udev joypad driver
-    // fills its slots densely from 0 in attach order, so the index den-input
-    // reports is the pad's rank among attached pads, not its js number.
-    content.push_str("\n# Den, controllers\n");
+    content.push('\n');
     content.push_str(&format!("input_max_users = \"{}\"\n", MAX_PLAYERS));
     for binding in players {
         if let Some(index) = binding.joypad_index {
@@ -121,10 +92,7 @@ pub(crate) fn write_config(
         }
     }
 
-    // And the keyboard, always, so there is a way to play whether or not a
-    // pad turned up. These are player one's keys; a pad assigned to player
-    // one works alongside them rather than instead of them.
-    content.push_str("\n# Den, keyboard for player one\n");
+    content.push('\n');
     for (button, key, _shown) in KEYBOARD_SCHEME {
         content.push_str(&format!("input_player1_{button} = \"{key}\"\n"));
     }
@@ -218,11 +186,9 @@ mod tests {
         .unwrap();
         let text = fs::read_to_string(&cfg).unwrap();
 
-        // Theirs, kept.
         assert!(text.contains("video_driver = \"vulkan\""));
         assert!(text.contains("input_player1_a = \"x\""));
         assert!(text.contains("video_shader_enable = \"true\""));
-        // Ours, and only once, so RetroArch cannot read the wrong one.
         assert_eq!(text.matches("video_fullscreen =").count(), 1);
         assert!(text.contains("video_fullscreen = \"true\""));
         assert_eq!(text.matches("libretro_directory =").count(), 1);
@@ -243,7 +209,6 @@ mod tests {
         )
         .unwrap();
         let text = fs::read_to_string(&cfg).unwrap();
-        // With no pad at all there is still a way to play, and a way out.
         assert!(text.contains("input_player1_up = \"up\""));
         assert!(text.contains("input_player1_a = \"x\""));
         assert!(text.contains("input_player1_start = \"enter\""));
@@ -270,7 +235,6 @@ mod tests {
                     player: 2,
                     joypad_index: Some(0),
                 },
-                // A pad with no joystick node has no index to give.
                 PlayerBinding {
                     player: 3,
                     joypad_index: None,
@@ -289,7 +253,6 @@ mod tests {
         );
         assert!(!text.contains("input_player3_joypad_index"), "{text}");
         assert!(text.contains("input_max_users = \"4\""));
-        // The keyboard is still there beside the pad.
         assert!(text.contains("input_player1_up = \"up\""));
     }
 
@@ -334,7 +297,6 @@ mod tests {
         }
         assert!(text.contains("input_player1_a = \"x\""));
         assert!(text.contains("input_player1_joypad_index = \"0\""));
-        // And what Den has no opinion about is left alone.
         assert!(text.contains("video_driver = \"gl\""));
     }
 }

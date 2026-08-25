@@ -5,8 +5,6 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
-# Deliberately outside the main workspace: Tauri drags in platform WebView
-# dependencies that the headless CI for the core crates should never build.
 [workspace]
 
 [lib]

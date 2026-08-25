@@ -1,8 +1,3 @@
-//! Play sessions, driven through a stand-in for RetroArch.
-//!
-//! This file is its own test binary on purpose: it sets `RETROARCH`, which is
-//! process-global, and nothing else in the suite may see it.
-
 #![cfg(unix)]
 
 use den_core::Den;
@@ -10,8 +5,6 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-/// A script that stands in for RetroArch: it writes down how it was called
-/// and exits.
 fn fake_retroarch(dir: &Path) -> std::path::PathBuf {
     let path = dir.join("retroarch");
     let log = dir.join("argv");
@@ -40,21 +33,16 @@ fn a_launch_is_recorded_and_closed_when_the_emulator_exits() {
     den.intake(&drop, None).unwrap();
     let game = den.db().list_games("", None).unwrap().remove(0);
 
-    // Nothing has been played yet.
     assert!(den.db().recent_games(4).unwrap().is_empty());
 
     let info = den.launch(game.id).unwrap();
     assert!(info.pid > 0);
     assert_eq!(info.core, "mesen");
 
-    // The launch is on the record the moment it happens: this is what fills
-    // the library's Recent row and the game's playtime.
     let recent = den.db().recent_games(4).unwrap();
     assert_eq!(recent.len(), 1);
     assert_eq!(recent[0].id, game.id);
 
-    // The stand-in exits immediately; reaping closes the session rather than
-    // leaving a row open forever and a zombie process behind.
     for _ in 0..200 {
         den.reap();
         if den.running_count() == 0 {
@@ -71,8 +59,6 @@ fn a_launch_is_recorded_and_closed_when_the_emulator_exits() {
         "the session was left open"
     );
 
-    // What RetroArch was actually told. `-L` has to name a file: `mesen_libretro`
-    // on its own is not one on any platform, which is what it used to be given.
     let argv = fs::read_to_string(tmp.path().join("argv")).unwrap();
     let args: Vec<&str> = argv.lines().collect();
     let core_arg = args

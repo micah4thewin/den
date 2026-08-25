@@ -4,7 +4,6 @@ import { $, el, toast } from "./dom";
 import { renderLibrary } from "./library";
 import type { Report } from "./types";
 
-/** The last component of a path, whichever separator wrote it. */
 function baseName(path: string): string {
   const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return cut >= 0 ? path.slice(cut + 1) : path;
@@ -23,7 +22,6 @@ function renderReport(report: Report): void {
     return;
   }
 
-  // The same words, counted: what happened, before which file it happened to.
   const tally = new Map<string, number>();
   for (const entry of report.entries) {
     tally.set(entry.outcome.word, (tally.get(entry.outcome.word) ?? 0) + 1);
@@ -85,9 +83,6 @@ export async function chooseAndIntake(): Promise<void> {
 export async function wireDrop(): Promise<void> {
   const dropzone = $<HTMLElement>("dropzone");
 
-  // It is announced as a button and reachable with Tab, so it has to do what
-  // a button does. Native drag-and-drop is the fast path; this is the one
-  // that works with a keyboard, or with no pointer at all.
   dropzone.addEventListener("click", () => void chooseAndIntake());
   dropzone.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -109,7 +104,5 @@ export async function wireDrop(): Promise<void> {
       }
     });
   } catch {
-    // Native drag-drop is unavailable in a plain browser; the Choose button
-    // still works, so this is only a quiet degradation.
   }
 }

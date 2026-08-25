@@ -1,53 +1,31 @@
-//! Magic bytes: what a file *is* before we trust its name.
-
 use crate::System;
 use std::fs;
 use std::path::Path;
 
-/// What the first bytes of a file say it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
-    /// A container we can unpack: zip, 7z, rar, gzip, tar.
     Archive(Archive),
-    /// A ROM with a recognisable header.
     Rom(System),
-    /// An ISO9660 disc image (PS1, PS2, GameCube...).
     Iso9660,
-    /// A DOS/Windows executable (MZ header).
     Mz,
-    /// Nothing we can name.
     Unknown,
 }
 
-/// The archive formats Den unpacks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Archive {
-    /// A PKZIP container.
     Zip,
-    /// A 7-Zip container.
     SevenZ,
-    /// A RAR container (RAR4 or RAR5).
     Rar,
-    /// A gzip stream, usually wrapping a tar.
     Gzip,
-    /// A POSIX tar container.
     Tar,
 }
 
-/// The ISO9660 primary volume descriptor sits at 0x8000 on a 2048-byte
-/// sector disc, so a head that stops short of it can never see one. Every
-/// other signature lives in the first few bytes; this length is set by the
-/// furthest one.
 const ISO_MARKER: usize = 0x8001;
 const HEAD: usize = ISO_MARKER + 5;
 
-/// Sniff the first bytes of a file.
 pub fn sniff(path: &Path) -> std::io::Result<Kind> {
     let mut file = fs::File::open(path)?;
     let mut head = vec![0u8; HEAD];
-    // One `read` returns what one syscall gave us, which for a large file
-    // is usually less than HEAD; read to the end of the buffer or the end
-    // of the file, whichever comes first.
     let mut filled = 0;
     loop {
         match std::io::Read::read(&mut file, &mut head[filled..]) {
@@ -64,7 +42,6 @@ pub fn sniff(path: &Path) -> std::io::Result<Kind> {
     Ok(kinds(&head))
 }
 
-/// Classify a byte slice (the file's head) without touching the disk.
 pub fn kinds(head: &[u8]) -> Kind {
     if head.starts_with(b"PK\x03\x04") || head.starts_with(b"PK\x05\x06") {
         return Kind::Archive(Archive::Zip);
@@ -84,16 +61,12 @@ pub fn kinds(head: &[u8]) -> Kind {
     if head.starts_with(b"NES\x1a") {
         return Kind::Rom(System::Nes);
     }
-    // N64 cartridges: three byte orders, same bytes in a different order.
     if head.starts_with(&[0x80, 0x37, 0x12, 0x40])
         || head.starts_with(&[0x37, 0x80, 0x40, 0x12])
         || head.starts_with(&[0x40, 0x12, 0x37, 0x80])
     {
         return Kind::Rom(System::N64);
     }
-    // ISO9660: the volume descriptor sits at 0x8001 on a 2048-sector disc.
-    // The bound has to cover the whole marker, not its first byte: a head
-    // that stops inside it used to slice past the end and panic.
     if head.len() >= ISO_MARKER + 5 && &head[ISO_MARKER..ISO_MARKER + 5] == b"CD001" {
         return Kind::Iso9660;
     }
@@ -159,7 +132,6 @@ mod tests {
 
     #[test]
     fn head_that_stops_inside_the_iso_marker_does_not_panic() {
-        // Anything from 0x8003 to 0x8005 used to slice past the end.
         for len in 0x8000..=0x8005 {
             let mut head = vec![0u8; len];
             if len > 0x8001 {

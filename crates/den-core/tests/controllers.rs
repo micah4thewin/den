@@ -1,9 +1,3 @@
-//! Pads, the players they answer for, and what RetroArch is told about them.
-//!
-//! Its own test binary: it sets `DEN_SYSFS_INPUT` and `RETROARCH`, which are
-//! process-global, so that a machine with a real controller plugged into it
-//! gives the same answers as one without.
-
 #![cfg(unix)]
 
 use den_core::{Den, MAX_PLAYERS};
@@ -12,18 +6,12 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
-/// `DEN_SYSFS_INPUT` and `RETROARCH` belong to the process, not to a test, so
-/// the tests in this binary take turns. Without this one test's fixture pads
-/// show up in another's, which is a failure of the harness that looks exactly
-/// like a failure of the detector.
 static ENV: Mutex<()> = Mutex::new(());
 
 fn exclusive() -> MutexGuard<'static, ()> {
-    // A panicking test poisons the lock; the next one still has to run.
     ENV.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Build the shape of a real `/sys/class/input` for one pad.
 fn plant_pad(root: &Path, input: &str, js: &str, name: &str, vendor: &str, product: &str) {
     let device = root.join(input);
     fs::create_dir_all(device.join("id")).unwrap();
@@ -31,7 +19,6 @@ fn plant_pad(root: &Path, input: &str, js: &str, name: &str, vendor: &str, produ
     fs::write(device.join("name"), format!("{name}\n")).unwrap();
     fs::write(device.join("id/vendor"), format!("{vendor}\n")).unwrap();
     fs::write(device.join("id/product"), format!("{product}\n")).unwrap();
-    // BTN_GAMEPAD, in this machine's word size.
     let width = usize::BITS as usize;
     let mut words = vec!["0".to_string(); 12];
     let index = words.len() - 1 - (0x130 / width);
@@ -43,13 +30,11 @@ fn plant_pad(root: &Path, input: &str, js: &str, name: &str, vendor: &str, produ
     std::os::unix::fs::symlink(&device, node.join("device")).unwrap();
 }
 
-/// A stand-in RetroArch that writes down how it was called.
 fn fake_retroarch(dir: &Path) -> PathBuf {
     fs::create_dir_all(dir).unwrap();
     let path = dir.join("retroarch");
     fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
-    // A core, so the launch is not refused for the want of one.
     let cores = dir.join("cores");
     fs::create_dir_all(&cores).unwrap();
     let ext = if cfg!(target_os = "macos") {
@@ -91,12 +76,10 @@ fn a_pad_plugged_in_is_player_one_without_being_asked() {
         "a controller you plugged in should be Player 1 without a ceremony"
     );
 
-    // And that sticks, rather than being decided afresh each time.
     drop(den);
     let den = Den::open(&tmp.path().join("den")).unwrap();
     assert_eq!(den.controllers()[0].player, Some(1));
 
-    // A second pad takes the next free player.
     plant_pad(&sysfs, "input6", "js1", "8BitDo SN30 Pro", "2dc8", "6001");
     let pads = den.controllers();
     assert_eq!(pads.len(), 2);
@@ -123,7 +106,6 @@ fn assigning_a_player_somebody_else_holds_swaps_them() {
     assert_eq!(pads[0].player, Some(1));
     assert_eq!(pads[1].player, Some(2));
 
-    // Give player 1 to the second pad. The first cannot also be player 1.
     den.assign_pad(&two, Some(1)).unwrap();
     let pads = den.controllers();
     let player = |identity: &str| {
@@ -139,8 +121,6 @@ fn assigning_a_player_somebody_else_holds_swaps_them() {
          not been left claiming a player that is gone"
     );
 
-    // And a pad can be given to nobody -- and stay that way, rather than
-    // being handed a player again by the next look at the controllers.
     den.assign_pad(&one, None).unwrap();
     for _ in 0..3 {
         let pads = den.controllers();
@@ -153,7 +133,6 @@ fn assigning_a_player_somebody_else_holds_swaps_them() {
         );
     }
 
-    // A player that does not exist is refused rather than written down.
     assert!(den.assign_pad(&two, Some(MAX_PLAYERS + 1)).is_err());
     assert_eq!(den.controllers()[1].player, Some(1));
 
@@ -182,8 +161,6 @@ fn retroarch_is_told_which_pad_is_which_player() {
     den.intake(&drop_dir, None).unwrap();
     let game = den.db().list_games("", None).unwrap().remove(0);
 
-    // Put the second pad on player one, so the config cannot be right by the
-    // accident of the pads already being in order.
     let second = den.controllers()[1].identity.clone();
     den.assign_pad(&second, Some(1)).unwrap();
 
@@ -199,7 +176,6 @@ fn retroarch_is_told_which_pad_is_which_player() {
         config.contains("input_player2_joypad_index = \"0\""),
         "player two should be joystick 0:\n{config}"
     );
-    // And the keyboard is there regardless, so there is always a way to play.
     assert!(config.contains("input_player1_up = \"up\""));
     assert!(config.contains("input_exit_emulator = \"escape\""));
 
@@ -216,7 +192,6 @@ fn the_keyboard_scheme_shown_is_the_one_written() {
 
     let scheme = den.keyboard_scheme();
     assert!(!scheme.is_empty());
-    // Every line names something a person would recognise, and a key.
     for binding in &scheme {
         assert!(!binding.action.is_empty(), "{binding:?}");
         assert!(!binding.key.is_empty(), "{binding:?}");

@@ -50,7 +50,7 @@ machine and in CI without dragging platform GUI dependencies in.
 The core workspace needs nothing but a Rust toolchain:
 
 ```sh
-cargo test --workspace          # 94 tests, headless
+cargo test --workspace          # 99 tests, headless
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 ```
@@ -115,7 +115,7 @@ shell hands to the runner. Three sources:
 | --- | --- |
 | `--from-archive PATH` | an AppImage, `.zip`, `.tar.*`, `.7z`, or unpacked directory you downloaded — **use this for a release**, because those builds carry their own libraries |
 | `--from-system` | the RetroArch installed here (the default): immediate, no network, but linked against *this* machine's libraries |
-| `--from-manifest` | download per `tools/runtime-manifest.json`, verified against a pinned SHA-256 |
+| `--from-manifest` | download per `tools/runtime-manifest.json`. The manifest ships with no SHA-256 pinned, and the bundler refuses an unpinned entry: run once with `--record` to pin the hash of what you downloaded, and every later run verifies against it |
 
 A build with nothing staged still works; it falls back to the machine. That is
 why the build step passes `--allow-missing`.

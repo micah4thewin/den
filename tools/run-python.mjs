@@ -1,8 +1,3 @@
-// Run a Python script with whichever interpreter this machine calls it.
-//
-// `python3` is the name everywhere except a stock Windows install, where the
-// launcher is `py` and the executable is `python`. A build script that hard-
-// codes one of them fails on the other, so this asks.
 import { spawnSync } from "node:child_process";
 
 const [script, ...rest] = process.argv.slice(2);
@@ -27,4 +22,4 @@ console.error(
   "skip bundling — a build without a staged runtime still works and falls\n" +
   "back to whatever RetroArch is installed.",
 );
-process.exit(0); // not fatal: the build carries on without a bundled runtime
+process.exit(0);

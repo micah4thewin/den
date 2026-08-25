@@ -1,21 +1,3 @@
-/* Den desktop styles.
- *
- * Greyscale by rule. The chrome has no accent colour anywhere, so the only
- * colour on screen is the box art itself. Intake status is words in sunken
- * wells; a long operation breathes instead of spinning; emphasis is
- * inversion.
- *
- * Read in order:
- *
- *   tokens      the shared family palette and semantic names
- *   base        reset, type, and the three materials as bare controls
- *   animations  every keyframe, so reduced-motion is answered in one place
- *   app         the Den shell: sidebar, shelves, intake, controllers
- *
- * The first three files are copied verbatim from the family design system;
- * nothing below tokens.css contains a colour literal.
- */
-
 @import "./styles/tokens.css";
 @import "./styles/base.css";
 @import "./styles/animations.css";

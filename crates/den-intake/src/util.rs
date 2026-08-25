@@ -1,8 +1,5 @@
-//! Small path and naming helpers shared across the intake pipeline.
-
 use std::path::{Path, PathBuf};
 
-/// The lower-cased extension of a path, without the dot ("" if none).
 pub fn ext_of(path: &Path) -> String {
     path.extension()
         .and_then(|e| e.to_str())
@@ -10,7 +7,6 @@ pub fn ext_of(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// The file stem (name without extension) of a path.
 pub fn stem_of(path: &Path) -> String {
     path.file_stem()
         .and_then(|s| s.to_str())
@@ -18,7 +14,6 @@ pub fn stem_of(path: &Path) -> String {
         .to_string()
 }
 
-/// Remove characters that are not legal in a file or folder name.
 pub fn sanitize(raw: &str) -> String {
     let cleaned: String = raw
         .chars()
@@ -29,9 +24,6 @@ pub fn sanitize(raw: &str) -> String {
         })
         .collect();
     let mut s = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
-    // `String::truncate` panics unless the index lands on a character
-    // boundary, and a Japanese or accented title is very likely to put a
-    // multi-byte character across the 120th byte.
     s.truncate(floor_char_boundary(&s, MAX_NAME));
     let s = s.trim();
     if s.is_empty() {
@@ -41,13 +33,8 @@ pub fn sanitize(raw: &str) -> String {
     }
 }
 
-/// The longest name Den will write, in bytes. Comfortably inside the 255-byte
-/// limit every filesystem Den targets imposes on one path component, with room
-/// left for the extension and a `_variants` prefix.
 const MAX_NAME: usize = 120;
 
-/// The largest index `<= max` that is a character boundary in `s`.
-/// (`str::floor_char_boundary` is still unstable.)
 fn floor_char_boundary(s: &str, max: usize) -> usize {
     if max >= s.len() {
         return s.len();
@@ -59,8 +46,6 @@ fn floor_char_boundary(s: &str, max: usize) -> usize {
     i
 }
 
-/// A display-friendly game title from a raw filename: underscores to spaces,
-/// trailing `(region)` tags removed, illegal characters stripped.
 pub fn clean_title(raw: &str) -> String {
     let mut s = raw.replace('_', " ");
     loop {
@@ -78,9 +63,6 @@ pub fn clean_title(raw: &str) -> String {
     sanitize(&s)
 }
 
-/// Join a raw archive entry name onto a destination, refusing path traversal.
-/// Any `..` component rejects the entry outright (the same posture as the zip
-/// crate's `enclosed_name`).
 pub fn safe_join(dest: &Path, raw_name: &str) -> Option<PathBuf> {
     let normalized = raw_name.replace('\\', "/");
     let mut out = dest.to_path_buf();
@@ -118,13 +100,11 @@ mod tests {
 
     #[test]
     fn sanitize_truncates_on_a_character_boundary() {
-        // 119 ASCII bytes then a two-byte character straddling byte 120.
         let raw = format!("{}\u{00e9}{}", "a".repeat(119), "b".repeat(40));
         let out = sanitize(&raw);
         assert!(out.len() <= MAX_NAME);
         assert_eq!(out, "a".repeat(119));
 
-        // A name made entirely of multi-byte characters still truncates.
         let wide = "\u{65e5}".repeat(200);
         assert!(sanitize(&wide).len() <= MAX_NAME);
     }

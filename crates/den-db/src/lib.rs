@@ -1,94 +1,55 @@
-//! The Den library database: SQLite in WAL mode.
-//!
-//! Owns games, per-game variants, battery saves, save states, play sessions,
-//! BIOS files, and intake reports. Every write goes through SQLite in WAL
-//! mode, so a crash mid-write can never corrupt the previous good state.
-
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// A shelved game as the interface sees it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Game {
-    /// The row id, and the handle every other call takes.
     pub id: i64,
-    /// The title as the library shows it.
     pub title: String,
-    /// The system shelf this game sits on.
     pub system: String,
-    /// The shelved file the runner boots.
     pub path: String,
-    /// SHA-1 of the shelved file, when one was taken.
     pub hash: Option<String>,
-    /// Size of the shelved file in bytes.
     pub size: Option<i64>,
-    /// The intake word this game arrived with.
     pub status: String,
-    /// A per-game core override; the system default applies when unset.
     pub core: Option<String>,
-    /// The artwork tile filed for this game, if any.
     pub art: Option<String>,
-    /// Unix time the row was written.
     pub created_at: i64,
-    /// Unix time the row last changed.
     pub updated_at: i64,
-    /// Seconds of recorded play time (from sessions), 0 if never played.
     pub playtime: i64,
-    /// Unix time of the most recent session, if any.
     pub last_played: Option<i64>,
 }
 
-/// A save (battery save or state) attached to a game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Save {
-    /// The row id.
     pub id: i64,
-    /// The game this save belongs to.
     pub game_id: i64,
-    /// `battery` or `state`.
     pub kind: String,
-    /// Where the save file lives.
     pub path: String,
-    /// Unix time the row was written.
     pub created_at: i64,
 }
 
-/// A play session: a launch that ran (or is running).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
-    /// The row id.
     pub id: i64,
-    /// The game that was launched.
     pub game_id: i64,
-    /// Unix time the launch happened.
     pub started: i64,
-    /// How long it ran; `None` while it is still running.
     pub duration_seconds: Option<i64>,
 }
 
-/// A BIOS file recognised by hash during intake and filed automatically.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bios {
-    /// The row id.
     pub id: i64,
-    /// The canonical name for this BIOS.
     pub name: String,
-    /// Where it was filed.
     pub path: String,
-    /// SHA-1 of the file.
     pub hash: String,
-    /// Unix time the row was written.
     pub created_at: i64,
 }
 
-/// The library database. One per library directory.
 pub struct Db {
     conn: Connection,
 }
 
-/// The current unix time in seconds, the clock every table's rows carry.
 pub fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -97,14 +58,12 @@ pub fn now() -> i64 {
 }
 
 impl Db {
-    /// Open (creating if needed) the database at `path`.
     pub fn open(path: &Path) -> rusqlite::Result<Db> {
         let conn = Connection::open(path)?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
         Db::init(conn)
     }
 
-    /// Open the database in memory (for tests).
     pub fn open_in_memory() -> rusqlite::Result<Db> {
         Db::init(Connection::open_in_memory()?)
     }
@@ -175,8 +134,6 @@ impl Db {
         )
     }
 
-    /// Add a game; returns its id. A duplicate path is a no-op returning the
-    /// existing id, which is what makes re-running intake idempotent.
     pub fn add_game(
         &self,
         title: &str,
@@ -198,7 +155,6 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// Find a game by its shelved file path.
     pub fn find_by_path(&self, path: &Path) -> rusqlite::Result<Option<Game>> {
         let mut stmt = self.conn.prepare(&row_sql("WHERE g.path = ?1"))?;
         let game = stmt
@@ -207,22 +163,18 @@ impl Db {
         Ok(game)
     }
 
-    /// Fetch one game by id.
     pub fn get_game(&self, id: i64) -> rusqlite::Result<Option<Game>> {
         let mut stmt = self.conn.prepare(&row_sql("WHERE g.id = ?1"))?;
         let game = stmt.query_row(params![id], row_to_game).optional()?;
         Ok(game)
     }
 
-    /// List games, optionally filtered by a title substring and a system.
     pub fn list_games(&self, filter: &str, system: Option<&str>) -> rusqlite::Result<Vec<Game>> {
         let (mut sql, mut args): (String, Vec<Box<dyn rusqlite::types::ToSql>>) =
             if filter.is_empty() {
                 (row_sql(""), vec![])
             } else {
                 (
-                    // Without ESCAPE, a title containing `%` or `_` -- and plenty
-                    // do -- would be read as a wildcard rather than searched for.
                     row_sql("WHERE g.title LIKE ?1 ESCAPE '\\'"),
                     vec![Box::new(format!("%{}%", escape_like(filter)))],
                 )
@@ -246,7 +198,6 @@ impl Db {
         rows.collect()
     }
 
-    /// System names with game counts, ordered by count.
     pub fn list_systems(&self) -> rusqlite::Result<Vec<(String, i64)>> {
         let mut stmt = self.conn.prepare(
             "SELECT system, COUNT(*) FROM games GROUP BY system ORDER BY system COLLATE NOCASE",
@@ -255,7 +206,6 @@ impl Db {
         rows.collect()
     }
 
-    /// Set the per-game core override (NULL clears it back to the default).
     pub fn set_core(&self, game_id: i64, core: Option<&str>) -> rusqlite::Result<()> {
         self.conn.execute(
             "UPDATE games SET core = ?1, updated_at = ?2 WHERE id = ?3",
@@ -264,7 +214,6 @@ impl Db {
         Ok(())
     }
 
-    /// Record that a game has an artwork tile (hash-named, libretro style).
     pub fn set_art(&self, game_id: i64, art: &str) -> rusqlite::Result<()> {
         self.conn.execute(
             "UPDATE games SET art = ?1, updated_at = ?2 WHERE id = ?3",
@@ -273,7 +222,6 @@ impl Db {
         Ok(())
     }
 
-    /// Attach a save (battery save or state) to a game, deduplicated by path.
     pub fn add_save(&self, game_id: i64, kind: &str, path: &Path) -> rusqlite::Result<i64> {
         let path_str = path.to_string_lossy();
         let existing: Option<i64> = self
@@ -294,7 +242,6 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// List saves for a game, newest first.
     pub fn list_saves(&self, game_id: i64) -> rusqlite::Result<Vec<Save>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, game_id, kind, path, created_at FROM saves
@@ -312,7 +259,6 @@ impl Db {
         rows.collect()
     }
 
-    /// Record a session start; returns the session id.
     pub fn start_session(&self, game_id: i64) -> rusqlite::Result<i64> {
         self.conn.execute(
             "INSERT INTO sessions (game_id, started) VALUES (?1, ?2)",
@@ -321,7 +267,6 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// Close a session by id, recording its duration.
     pub fn end_session(&self, session_id: i64) -> rusqlite::Result<()> {
         let started: i64 = self
             .conn
@@ -339,7 +284,6 @@ impl Db {
         Ok(())
     }
 
-    /// The most recent sessions, joined with their games (for Continue).
     pub fn recent_sessions(&self, limit: i64) -> rusqlite::Result<Vec<(Session, Game)>> {
         let sql = format!(
             "SELECT s.id, s.game_id, s.started, s.duration_seconds, {}
@@ -360,7 +304,6 @@ impl Db {
         rows.collect()
     }
 
-    /// The games the front page leads with: most recently played first.
     pub fn recent_games(&self, limit: i64) -> rusqlite::Result<Vec<Game>> {
         let sql = format!(
             "SELECT DISTINCT {}
@@ -374,7 +317,6 @@ impl Db {
         rows.collect()
     }
 
-    /// The game whose newest save or state is the freshest: the Continue row.
     pub fn continue_game(&self) -> rusqlite::Result<Option<Game>> {
         let sql = format!(
             "SELECT {}
@@ -393,7 +335,6 @@ impl Db {
         Ok(game)
     }
 
-    /// File a recognised BIOS, deduplicated by path.
     pub fn add_bios(&self, name: &str, path: &Path, hash: &str) -> rusqlite::Result<i64> {
         let path_str = path.to_string_lossy();
         let existing: Option<i64> = self
@@ -414,7 +355,6 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// Store an intake report card for the record.
     pub fn add_report(&self, json: &str) -> rusqlite::Result<i64> {
         self.conn.execute(
             "INSERT INTO reports (created_at, json) VALUES (?1, ?2)",
@@ -423,7 +363,6 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// Read a setting, if it has ever been written.
     pub fn setting(&self, key: &str) -> rusqlite::Result<Option<String>> {
         self.conn
             .query_row(
@@ -434,9 +373,6 @@ impl Db {
             .optional()
     }
 
-    /// Write a setting, or clear it with `None`. A setting is something the
-    /// person chose about *this* library, so it belongs beside the library
-    /// rather than in a config file somewhere else on the machine.
     pub fn set_setting(&self, key: &str, value: Option<&str>) -> rusqlite::Result<()> {
         match value {
             Some(value) => self.conn.execute(
@@ -451,13 +387,11 @@ impl Db {
         Ok(())
     }
 
-    /// The library's total game count.
     pub fn game_count(&self) -> rusqlite::Result<i64> {
         self.conn
             .query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0))
     }
 
-    /// All hashes currently shelved: intake uses this to dedupe.
     pub fn shelved_hashes(&self) -> rusqlite::Result<std::collections::HashSet<String>> {
         let mut stmt = self
             .conn
@@ -466,7 +400,6 @@ impl Db {
         rows.collect()
     }
 
-    /// The library directory for a game's path (its shelf folder).
     pub fn game_dir(&self, id: i64) -> rusqlite::Result<Option<PathBuf>> {
         let game = self.get_game(id)?;
         Ok(game.map(|g| {
@@ -478,7 +411,6 @@ impl Db {
     }
 }
 
-/// Escape the LIKE metacharacters so a search term is matched literally.
 fn escape_like(term: &str) -> String {
     let mut out = String::with_capacity(term.len());
     for c in term.chars() {
@@ -604,7 +536,7 @@ mod tests {
         let s = db.start_session(id).unwrap();
         db.end_session(s).unwrap();
         let game = db.get_game(id).unwrap().unwrap();
-        assert_eq!(game.playtime, 0); // ended in the same second: 0s is fine
+        assert_eq!(game.playtime, 0);
         assert!(game.last_played.is_some());
         assert_eq!(db.recent_games(5).unwrap().len(), 1);
     }
@@ -618,7 +550,7 @@ mod tests {
         db.add_save(id, "battery", Path::new("/saves/1.srm"))
             .unwrap();
         db.add_save(id, "battery", Path::new("/saves/1.srm"))
-            .unwrap(); // dedup
+            .unwrap();
         assert_eq!(db.list_saves(id).unwrap().len(), 1);
         let cont = db.continue_game().unwrap().unwrap();
         assert_eq!(cont.id, id);
@@ -652,7 +584,6 @@ mod tests {
         db.add_game("Zelda", "NES", Path::new("/g2"), None, None, "added")
             .unwrap();
         assert_eq!(db.list_games("100%", None).unwrap().len(), 1);
-        // A bare wildcard is a search for that character, not for everything.
         assert_eq!(db.list_games("%", None).unwrap().len(), 1);
         assert_eq!(db.list_games("_", None).unwrap().len(), 0);
     }
@@ -667,7 +598,6 @@ mod tests {
             db.setting("retroarch_path").unwrap().as_deref(),
             Some("/opt/retroarch/retroarch")
         );
-        // Writing again replaces rather than failing on the primary key.
         db.set_setting("retroarch_path", Some("/usr/bin/retroarch"))
             .unwrap();
         assert_eq!(

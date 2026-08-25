@@ -10,6 +10,5 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
-  // Tauri expects a fixed origin; nothing here should be reachable remotely.
   clearScreen: false,
 });

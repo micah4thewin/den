@@ -1,9 +1,3 @@
-//! The intake pipeline over a whole drop, end to end.
-//!
-//! The unit tests in the crate cover one decision each. This one covers the
-//! shape of the thing someone actually does: point Den at a folder of
-//! downloads and ask what happened to every file in it.
-
 use den_db::Db;
 use den_ident::dat::Index;
 use den_intake::{IntakeOptions, Outcome, Report};
@@ -11,12 +5,10 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// Build the drop every test below works from.
 fn drop_folder(root: &Path) -> PathBuf {
     let drop = root.join("downloads");
     fs::create_dir_all(&drop).unwrap();
 
-    // A zip holding a cartridge ROM and its manual.
     let f = fs::File::create(drop.join("Pack.zip")).unwrap();
     let mut zw = zip::ZipWriter::new(f);
     let opts = zip::write::SimpleFileOptions::default();
@@ -26,13 +18,10 @@ fn drop_folder(root: &Path) -> PathBuf {
     zw.write_all(b"scanned manual").unwrap();
     zw.finish().unwrap();
 
-    // A bare disc image with no cue sheet beside it.
     fs::write(drop.join("Twisted Metal (USA).bin"), vec![7u8; 4096]).unwrap();
 
-    // A PlayStation BIOS, which wears the same extension as the disc above.
     fs::write(drop.join("scph1001.bin"), vec![9u8; 2048]).unwrap();
 
-    // A two-disc set.
     fs::write(
         drop.join("Final Fantasy VII (USA) (Disc 1).bin"),
         vec![1u8; 2048],
@@ -44,10 +33,8 @@ fn drop_folder(root: &Path) -> PathBuf {
     )
     .unwrap();
 
-    // Somebody's battery save for the cartridge above.
     fs::write(drop.join("Super Mario Bros (USA).srm"), vec![3u8; 32]).unwrap();
 
-    // A Genesis cartridge. `.md` is also markdown; the system claims it.
     fs::write(
         drop.join("Sonic the Hedgehog (USA, Europe).md"),
         vec![5u8; 512],
@@ -87,8 +74,6 @@ fn every_input_file_gets_exactly_one_word() {
     let db = Db::open(&tmp.path().join("library.db")).unwrap();
     let report = run(&library, &drop, &db);
 
-    // The zip is consumed into its two members, so the eight files on disk
-    // become eight lines: two from the zip, six loose.
     let inputs: Vec<&str> = report.entries.iter().map(|e| e.input.as_str()).collect();
     assert_eq!(inputs.len(), 8, "{inputs:#?}");
 
@@ -98,7 +83,6 @@ fn every_input_file_gets_exactly_one_word() {
         "Twisted Metal (USA).bin",
         "scph1001.bin",
         "Final Fantasy VII (USA) (Disc 1).bin",
-        // Disc 2 used to be shelved silently, with no line of its own.
         "Final Fantasy VII (USA) (Disc 2).bin",
         "Super Mario Bros (USA).srm",
         "Sonic the Hedgehog (USA, Europe).md",
@@ -132,7 +116,6 @@ fn a_bios_is_filed_as_a_bios_and_not_as_a_playstation_game() {
         !titles.iter().any(|t| t.contains("scph")),
         "the BIOS was shelved as a game: {titles:?}"
     );
-    // And no cue sheet was invented for it.
     assert!(!library.join("PlayStation").join("scph1001").exists());
 }
 
@@ -174,8 +157,6 @@ fn a_disc_without_a_cue_gets_one_and_a_set_gets_a_playlist() {
     let single = library.join("PlayStation").join("Twisted Metal");
     assert!(single.join("Twisted Metal (USA).cue").is_file());
 
-    // The playlist is said once, on the set's first line, alongside whatever
-    // that disc itself needed.
     let first = report
         .entries
         .iter()
@@ -198,7 +179,6 @@ fn a_disc_without_a_cue_gets_one_and_a_set_gets_a_playlist() {
         ]
     );
 
-    // The game row points at something that exists.
     for game in db.list_games("", None).unwrap() {
         assert!(
             Path::new(&game.path).is_file(),
@@ -230,7 +210,6 @@ fn an_imported_save_is_attached_to_its_game() {
     assert_eq!(saves[0].kind, "battery");
     assert!(Path::new(&saves[0].path).is_file());
 
-    // Which is what makes the library's Continue row point somewhere.
     let cont = db.continue_game().unwrap().expect("a continue row");
     assert_eq!(cont.id, mario.id);
 }
@@ -269,7 +248,6 @@ fn the_drop_is_never_modified() {
     assert_eq!(before, tree(&drop), "intake touched the originals");
 }
 
-/// Every path under `dir`, with its size, sorted.
 fn tree(dir: &Path) -> Vec<(PathBuf, u64)> {
     let mut out = Vec::new();
     let Ok(entries) = fs::read_dir(dir) else {
