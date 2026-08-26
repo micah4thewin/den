@@ -449,7 +449,7 @@ mod tests {
                 PathBuf::from("/opt/My Emulators/retroarch"),
             ],
             "a launcher that knows how to start RetroArch is not RetroArch: \
-             running `flatpak` or `env` with Den's arguments appended gets a \
+             running `flatpak` or `env` with Play's arguments appended gets a \
              usage message and no emulator"
         );
     }

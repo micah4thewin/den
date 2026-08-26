@@ -65,7 +65,7 @@ function renderRetroArchNotice(status: RetroArchStatus): void {
     el(
       "p",
       "notice-word",
-      "Den can shelve and name games without RetroArch, but it needs RetroArch to play them.",
+      "Play can shelve and name games without RetroArch, but it needs RetroArch to play them.",
     ),
   );
   if (status.problem) notice.appendChild(el("p", "quiet", status.problem));
@@ -90,8 +90,8 @@ function renderRetroArchNotice(status: RetroArchStatus): void {
         "summary",
         undefined,
         status.searched.length === 1
-          ? "Where Den looked"
-          : `Where Den looked (${status.searched.length} places)`,
+          ? "Where Play looked"
+          : `Where Play looked (${status.searched.length} places)`,
       ),
     );
     const list = el("ul", "extra-list mono");

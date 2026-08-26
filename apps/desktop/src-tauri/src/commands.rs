@@ -1,77 +1,25 @@
 use crate::{with_den, AppState, CommandResult};
-use den_core::{
-    ControllerInfo, CoreStatus, Game, KeyBinding, LaunchInfo, Report, RetroArchStatus, Save,
-};
+use den_core::{ControllerInfo, KeyBinding, LaunchInfo, Report, RetroArchStatus};
+use den_web::views::{game_view, library_view, GameView, LibraryView};
 use serde::Serialize;
 use std::path::Path;
 use tauri::State;
 
-#[derive(Serialize)]
-pub(crate) struct SystemRow {
-    pub(crate) name: String,
-    pub(crate) count: i64,
-}
-
-#[derive(Serialize)]
-pub(crate) struct LibraryView {
-    pub(crate) path: String,
-    pub(crate) games: Vec<Game>,
-    pub(crate) systems: Vec<SystemRow>,
-    pub(crate) continue_game: Option<Game>,
-    pub(crate) recent: Vec<Game>,
-    pub(crate) retroarch: RetroArchStatus,
-}
-
-#[derive(Serialize)]
-pub(crate) struct GameView {
-    pub(crate) game: Game,
-    pub(crate) saves: Vec<Save>,
-    pub(crate) retroarch: RetroArchStatus,
-    pub(crate) core: CoreStatus,
-}
-
 #[tauri::command]
 pub(crate) fn get_library(state: State<'_, AppState>) -> CommandResult<LibraryView> {
-    with_den(&state, |den| {
-        den.reap();
-        let games = den.db().list_games("", None).map_err(|e| e.to_string())?;
-        let systems = den
-            .db()
-            .list_systems()
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .map(|(name, count)| SystemRow { name, count })
-            .collect();
-        let continue_game = den.db().continue_game().map_err(|e| e.to_string())?;
-        let recent = den.db().recent_games(8).map_err(|e| e.to_string())?;
-        Ok(LibraryView {
-            path: den.library.display().to_string(),
-            games,
-            systems,
-            continue_game,
-            recent,
-            retroarch: den.retroarch_status(),
-        })
-    })
+    with_den(&state, library_view)
 }
 
 #[tauri::command]
 pub(crate) fn get_game(state: State<'_, AppState>, id: i64) -> CommandResult<GameView> {
-    with_den(&state, |den| {
-        den.reap();
-        let game = den
-            .db()
-            .get_game(id)
-            .map_err(|e| e.to_string())?
-            .ok_or("game not found")?;
-        let saves = den.db().list_saves(id).map_err(|e| e.to_string())?;
-        let core = den.core_status(&game);
-        Ok(GameView {
-            game,
-            saves,
-            retroarch: den.retroarch_status(),
-            core,
-        })
+    with_den(&state, |den| game_view(den, id))
+}
+
+#[tauri::command]
+pub(crate) fn web_remote_urls() -> CommandResult<Vec<String>> {
+    Ok(match den_web::addr_from_env() {
+        Some(addr) => den_web::reachable_urls(addr),
+        None => Vec::new(),
     })
 }
 

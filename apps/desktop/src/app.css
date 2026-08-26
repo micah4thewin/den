@@ -376,8 +376,8 @@
   font-size: 0.72rem;
   font-weight: var(--w-bold);
   letter-spacing: 0.03em;
-  padding: 0.15em 0.6em;
-  border-radius: var(--r-pill);
+  padding: 0.2em 0.6em;
+  border-radius: var(--r-1);
   background: var(--surface);
   box-shadow: var(--lift-1);
 }

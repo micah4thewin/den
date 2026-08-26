@@ -8,7 +8,7 @@ fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(Den::default_library);
 
-    println!("Den doctor");
+    println!("Play doctor");
     println!(
         "  platform      {} {}",
         std::env::consts::OS,
@@ -74,7 +74,7 @@ fn main() {
         if status.chosen { "yes" } else { "no" }
     );
 
-    println!("\nWhere Den looked ({} places)", status.searched.len());
+    println!("\nWhere Play looked ({} places)", status.searched.len());
     let mut existing = 0usize;
     for place in &status.searched {
         let path = Path::new(place);
@@ -126,17 +126,17 @@ fn main() {
     }
 
     if !status.available {
-        println!("\nNothing here is fatal: Den shelves and names games without RetroArch.");
+        println!("\nNothing here is fatal: Play shelves and names games without RetroArch.");
         if status.chosen {
             println!(
                 "A RetroArch was chosen by hand and no longer works, and while that\n\
-                 stands Den does not search at all. Either choose another —\n\
+                 stands Play does not search at all. Either choose another —\n\
                  \"Choose RetroArch…\" on the Library screen — or press \"Use the\n\
                  automatic search again\" beside it to hand the choice back."
             );
         } else {
             println!(
-                "To play, either install RetroArch, or point Den at it — \"Choose RetroArch…\"\n\
+                "To play, either install RetroArch, or point Play at it — \"Choose RetroArch…\"\n\
                  on the Library screen, or set RETROARCH to the binary."
             );
         }
@@ -147,12 +147,12 @@ fn report_cores(den: &Den, retroarch: &Path) {
     println!("\nRetroArch's own configuration");
     match den_runner::user_config(retroarch) {
         Some(config) => println!("  {}", config.display()),
-        None => println!("  none found — Den cannot read where your cores are"),
+        None => println!("  none found — Play cannot read where your cores are"),
     }
 
     let Some(dir) = den.runner().cores_for(retroarch) else {
         println!("\nCores");
-        println!("  No cores directory found. Den will pass RetroArch the core");
+        println!("  No cores directory found. Play will pass RetroArch the core");
         println!("  file name and let it resolve one; if that fails, RetroArch");
         println!("  says `Fatal error received in: \"init_libretro_symbols()\"`.");
         return;
@@ -184,8 +184,8 @@ fn report_cores(den: &Den, retroarch: &Path) {
     }
     if !missing.is_empty() {
         println!(
-            "\n  A missing core is not a Den problem: RetroArch downloads cores itself,\n\
-             under Main Menu → Online Updater → Core Downloader. Den refuses to\n\
+            "\n  A missing core is not a Play problem: RetroArch downloads cores itself,\n\
+             under Main Menu → Online Updater → Core Downloader. Play refuses to\n\
              launch a game whose core is not there, rather than letting RetroArch\n\
              die with `init_libretro_symbols()`."
         );

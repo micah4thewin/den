@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The default capability for the Den shell: IPC to the local commands only.",
+  "description": "The default capability for the Play shell: IPC to the local commands only.",
   "windows": ["main"],
   "permissions": [
     "core:default"

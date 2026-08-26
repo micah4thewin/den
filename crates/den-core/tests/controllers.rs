@@ -205,7 +205,7 @@ fn the_keyboard_scheme_shown_is_the_one_written() {
         .any(|b| b.action == "Start" && b.key == "Enter"));
     assert!(scheme
         .iter()
-        .any(|b| b.action == "Quit back to Den" && b.key == "Escape"));
+        .any(|b| b.action == "Quit back to Play" && b.key == "Escape"));
 
     std::env::remove_var("DEN_SYSFS_INPUT");
 }

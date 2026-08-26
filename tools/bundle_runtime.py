@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Put a RetroArch inside Den, so a built Den needs nothing installed."""
+"""Put a RetroArch inside Play, so a built Play needs nothing installed."""
 
 import argparse
 import hashlib
@@ -282,7 +282,7 @@ def copy_cores(source, dest):
         log(f"           {name}  [{licence}]")
     missing = len(CORE_LICENCES) - len(copied)
     if missing:
-        log(f"           {missing} of Den's default cores were not installed here")
+        log(f"           {missing} of Play's default cores were not installed here")
     return copied
 
 
@@ -428,7 +428,7 @@ def main():
         raise
 
     log(f"\nStaged {os.path.relpath(binary, ROOT)}")
-    log("This build of Den will prefer it over anything installed on the machine.")
+    log("This build of Play will prefer it over anything installed on the machine.")
     log("RetroArch is GPLv3; see the note at the top of this script before you")
     log("hand the bundle to anybody else.")
     return 0
@@ -446,7 +446,7 @@ def clear(dest):
 
 
 def check(dest, manifest_path=None):
-    log("What Den would bundle")
+    log("What Play would bundle")
     retroarch = find_system_retroarch()
     log(f"  on this machine   {retroarch or 'nothing found'}")
     if retroarch:
@@ -454,7 +454,7 @@ def check(dest, manifest_path=None):
         log(f"  its cores         {cores or 'none found'}")
         if cores:
             have = [c for c in CORE_LICENCES if os.path.isfile(os.path.join(cores, f"{c}_libretro{CORE_EXT}"))]
-            log(f"  of Den's defaults {len(have)}/{len(CORE_LICENCES)} installed")
+            log(f"  of Play's defaults {len(have)}/{len(CORE_LICENCES)} installed")
     staged = find_binary(dest) if os.path.isdir(dest) else None
     log(f"  already staged    {staged or 'nothing'}")
     manifest_path = manifest_path or MANIFEST

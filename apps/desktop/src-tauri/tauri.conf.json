@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Den",
+  "productName": "Play",
   "version": "0.1.0",
   "identifier": "dev.den.app",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "Den",
+        "title": "Play",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
@@ -34,8 +34,8 @@
     ],
     "category": "Game",
     "shortDescription": "A quiet place to play the games you already own",
-    "longDescription": "Den is a local-first launcher that sorts, repairs, and shelves your game files, boots them through RetroArch, and resumes where you left off.",
-    "copyright": "Den contributors",
+    "longDescription": "Play is a local-first launcher that sorts, repairs, and shelves your game files, boots them through RetroArch, and resumes where you left off.",
+    "copyright": "Play contributors",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

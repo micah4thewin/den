@@ -10,7 +10,26 @@ the build plan's milestones, not semver.
 - Building the Tauri v2 desktop shell (M0 scaffold) over the already-built
   core workspace.
 
+### Changed
+- **The program ships under the name Play.** Window title, installer
+  name, wordmark, and every user-facing string say Play; the `den-*`
+  crates, the library directory (`~/.local/share/den`), and the `DEN_*`
+  environment variables keep their working names. Part of the family
+  rename: Chat (hearth, port 8888), Watch (lanflix, 7777), Play (den,
+  5555), Write (lockbox, 9999). The mark — a CRT with a play triangle —
+  did not change; it finally says the name out loud.
+- **Squarer chrome.** The radius scale drops from 6/10/14/20 to 2/4/6/8,
+  so buttons, tiles, and cards sit closer to right angles, and the intake
+  status word trades its pill for a square-cornered tag.
+
 ### Added
+- `crates/den-web` — the LAN remote: while the desktop app is open it
+  serves the shelf to every browser on the network at `0.0.0.0:5555` —
+  filter the shelf, tap a game, and it starts on the machine the library
+  lives on. Read-and-launch only; `DEN_WEB_PORT` moves it, `=0` turns it
+  off, `DEN_WEB_BIND` narrows it. The shell's library/game views moved
+  into `den-web::views` so the desktop IPC and the remote serve the same
+  data from the same code.
 - `crates/den-ident` — SHA-1/CRC32 hashing, magic-byte sniffing, and the DAT
   (No-Intro/Redump-style) index. Pure, builds headless.
 - `crates/den-db` — SQLite (WAL) library: games, variants, saves, sessions,

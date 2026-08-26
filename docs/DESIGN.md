@@ -5,14 +5,17 @@ repositories. That is the point of it: these programs are made by the same
 hand, and a shared description is cheaper to keep true than descriptions
 that agree by accident.
 
-| | |
-| --- | --- |
-| **lockbox** | a tamper-evident record of how a document was written |
-| **hearth** | a local-first assistant that can use your machine |
-| **den** | a launcher for the games you already own |
-| **lanflix** | a media server for your own network |
+| | | |
+| --- | --- | --- |
+| **lockbox** | ships as **Write** | a tamper-evident record of how a document was written |
+| **hearth** | ships as **Chat** | a local-first assistant that can use your machine |
+| **den** | ships as **Play** | a launcher for the games you already own |
+| **lanflix** | ships as **Watch** | a media server for your own network |
 
-Different jobs. One interface.
+Different jobs. One interface. The repositories keep their working names;
+what each program wears on its own chrome is the one-word name it ships
+under — and each serves that interface to the local network on a port from
+one family: Play on 5555, Watch on 7777, Chat on 8888, Write on 9999.
 
 Lanflix wears the system on a different stack (React and Tailwind), so
 instead of another copy of this file its repository carries an adaptation

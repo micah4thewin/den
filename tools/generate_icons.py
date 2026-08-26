@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write every Den application icon from the shared brand sheet."""
+"""Write every Play application icon from the shared brand sheet."""
 
 import os
 import sys

@@ -3,6 +3,7 @@ import { $, el, showScreen, toast } from "./dom";
 import { chooseAndIntake, wireDrop } from "./intake";
 import { renderLibrary } from "./library";
 import { icon } from "./ui/icons";
+import { invoke } from "@tauri-apps/api/core";
 
 function injectIcons(): void {
   for (const target of document.querySelectorAll<HTMLElement>("[data-icon]")) {
@@ -43,11 +44,23 @@ function wireNavigation(): void {
   $<HTMLButtonElement>("btn-pads").addEventListener("click", () => void refreshControllers());
 }
 
+async function showRemoteUrl(): Promise<void> {
+  try {
+    const urls = await invoke<string[]>("web_remote_urls");
+    if (urls.length > 0) {
+      $<HTMLElement>("remote-url").textContent = `On this network: ${urls[0]}`;
+    }
+  } catch {
+    // The shelf works the same with or without the remote.
+  }
+}
+
 async function boot(): Promise<void> {
   injectIcons();
   wireNavigation();
   await wireDrop();
   showScreen("library");
+  void showRemoteUrl();
   try {
     await renderLibrary();
   } catch (error) {

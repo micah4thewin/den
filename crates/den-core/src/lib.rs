@@ -70,7 +70,7 @@ fn button_label(button: &str) -> String {
 fn chrome_label(setting: &str) -> String {
     match setting {
         "input_menu_toggle" => "RetroArch menu",
-        "input_exit_emulator" => "Quit back to Den",
+        "input_exit_emulator" => "Quit back to Play",
         "input_save_state" => "Save state",
         "input_load_state" => "Load state",
         "input_toggle_fullscreen" => "Windowed / fullscreen",
@@ -280,7 +280,7 @@ impl Den {
         if let Some(player) = player {
             if !(1..=MAX_PLAYERS).contains(&player) {
                 return Err(Error::Unusable(format!(
-                    "there is no player {player}; Den drives {MAX_PLAYERS}"
+                    "there is no player {player}; Play drives {MAX_PLAYERS}"
                 )));
             }
             let mine = self
@@ -371,7 +371,7 @@ impl Den {
             Some(path) => {
                 let Some(text) = path.to_str() else {
                     return Err(Error::Unusable(format!(
-                        "`{}` is not valid UTF-8, so Den cannot store it. \
+                        "`{}` is not valid UTF-8, so Play cannot store it. \
                          Set RETROARCH to it instead.",
                         path.display()
                     )));
@@ -412,13 +412,13 @@ impl Drop for Den {
 }
 
 fn log_session_error(e: &rusqlite::Error) {
-    eprintln!("den: could not record the play session: {e}");
+    eprintln!("play: could not record the play session: {e}");
 }
 
 fn external_only(system: &str) -> Option<String> {
     match System::from_name(system) {
         Some(System::Ps2) | Some(System::Gamecube) | Some(System::Wii) => Some(format!(
-            "{system} needs an external emulator, which Den does not drive yet"
+            "{system} needs an external emulator, which Play does not drive yet"
         )),
         _ => None,
     }

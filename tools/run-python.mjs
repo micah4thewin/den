@@ -18,7 +18,7 @@ for (const [program, prefix] of candidates) {
 }
 
 console.error(
-  "No Python found. Den's runtime bundling needs Python 3; install it, or\n" +
+  "No Python found. Play's runtime bundling needs Python 3; install it, or\n" +
   "skip bundling — a build without a staged runtime still works and falls\n" +
   "back to whatever RetroArch is installed.",
 );

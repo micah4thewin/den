@@ -31,7 +31,7 @@ pub enum RunnerError {
     #[error(
         "the `{core}` core is not installed. RetroArch downloads cores itself: \
          open it, then Main Menu -> Online Updater -> Core Downloader, and get \
-         `{core}`. Den looked in {dir}"
+         `{core}`. Play looked in {dir}"
     )]
     CoreMissing { core: String, dir: String },
     #[error("io error: {0}")]

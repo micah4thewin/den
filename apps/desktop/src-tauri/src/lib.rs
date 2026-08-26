@@ -1,12 +1,12 @@
 mod commands;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use den_core::Den;
 use tauri::Manager;
 
 struct AppState {
-    den: Mutex<Den>,
+    den: den_web::SharedDen,
 }
 
 type CommandResult<T> = Result<T, String>;
@@ -38,13 +38,21 @@ pub fn run() {
                 Ok(dir) => den.set_runtime_dir(Some(dir)),
                 Err(e) => log::warn!("no resource directory: {e}"),
             }
-            app.manage(AppState {
-                den: Mutex::new(den),
-            });
+            let shared: den_web::SharedDen = Arc::new(Mutex::new(den));
+            if let Some(addr) = den_web::addr_from_env() {
+                let for_server = shared.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = den_web::serve(for_server, addr).await {
+                        log::warn!("the web remote could not start on {addr}: {e}");
+                    }
+                });
+            }
+            app.manage(AppState { den: shared });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_library,
+            commands::web_remote_urls,
             commands::get_game,
             commands::launch_game,
             commands::run_intake,
@@ -55,5 +63,5 @@ pub fn run() {
             commands::assign_pad,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running the Den shell");
+        .expect("error while running the Play shell");
 }

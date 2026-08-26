@@ -1,8 +1,10 @@
-# Den
+# Play
+
+*(This is the `den` repository; the program it builds now ships under the name **Play**.)*
 
 A quiet place to play the games you already own.
 
-Den is a local-first launcher. Point it at a folder of downloads and it
+Play is a local-first launcher. Point it at a folder of downloads and it
 unpacks, identifies, repairs, names, and shelves what it finds; then it boots
 those games through RetroArch and remembers where you left off. Nothing leaves
 the machine, nothing in the drop folder is modified, and nothing is ever
@@ -19,11 +21,11 @@ Every file that goes in comes back with a word:
 | `bios` | a BIOS file, recognised and filed |
 | `extra` | a manual, a scan, a readme, an imported save |
 | `quarantined` | could not be used, with the reason and a way to retry |
-| `unsupported` | a format Den does not handle |
+| `unsupported` | a format Play does not handle |
 
 Colour never carries any of that. Status is always a word — see
 [`docs/DESIGN.md`](docs/DESIGN.md) for why, and
-[`docs/design-notes.md`](docs/design-notes.md) for how Den in particular wears
+[`docs/design-notes.md`](docs/design-notes.md) for how Play in particular wears
 the shared design system.
 
 ## Layout
@@ -35,12 +37,13 @@ crates/den-db        SQLite (WAL): games, saves, sessions, BIOS, reports
 crates/den-runner    RetroArch process control and per-session config
 crates/den-input     controller detection
 crates/den-core      the one object the shell talks to
-crates/den-doctor    `den-doctor`: what Den can and cannot find on this machine
+crates/den-web       the LAN remote: the shelf in any browser on your network
+crates/den-doctor    `den-doctor`: what Play can and cannot find on this machine
 apps/desktop         the Tauri v2 shell: four screens over a typed IPC layer
 tools/               the brand sheet, the icon generator, the runtime bundler
 ```
 
-The six crates are one Cargo workspace and build headless: no WebView, no
+The seven crates are one Cargo workspace and build headless: no WebView, no
 window, no system packages. The shell is deliberately *outside* that
 workspace, in `apps/desktop/src-tauri`, so the crates can be tested on any
 machine and in CI without dragging platform GUI dependencies in.
@@ -76,10 +79,10 @@ python3 tools/check_brand.py     # also runs in CI
 
 ## The emulator
 
-Den does not emulate anything; it drives RetroArch. There are three ways that
-happens, and Den takes the first one that works:
+Play does not emulate anything; it drives RetroArch. There are three ways that
+happens, and Play takes the first one that works:
 
-1. **Bundled inside Den.** A build made with a runtime staged (see below) has
+1. **Bundled inside Play.** A build made with a runtime staged (see below) has
    its own RetroArch and needs nothing installed.
 2. **Chosen by hand.** The Library screen has **Choose RetroArch…** if the
    search comes up empty. The choice is kept with the library, so it holds.
@@ -95,7 +98,7 @@ If none of that finds yours, ask:
 cargo run -p den-doctor
 ```
 
-It prints every path Den tried, what was actually at each one, which answer it
+It prints every path Play tried, what was actually at each one, which answer it
 settled on, and which libretro cores are installed. It builds headless, so it
 runs without building the app.
 
@@ -120,8 +123,8 @@ shell hands to the runner. Three sources:
 A build with nothing staged still works; it falls back to the machine. That is
 why the build step passes `--allow-missing`.
 
-**Licences matter once you bundle.** RetroArch is GPLv3. Den runs it as a
-separate process, which is aggregation rather than linking, so Den's own MIT
+**Licences matter once you bundle.** RetroArch is GPLv3. Play runs it as a
+separate process, which is aggregation rather than linking, so Play's own MIT
 terms are unaffected — but *distributing* a bundle carries GPLv3's
 obligations, including offering the corresponding source. The cores are not
 uniform: `mesen`, `mupen64plus_next` and `swanstation` are GPL, `mgba` is
@@ -130,13 +133,13 @@ terms that restrict redistribution. Bundling for yourself is unproblematic;
 publishing a bundle means reading those terms. The script prints what it
 staged and under what licence, so the question is at least visible.
 
-**Cores are downloaded by RetroArch**, not by Den — Online Updater → Core
+**Cores are downloaded by RetroArch**, not by Play — Online Updater → Core
 Downloader. `--from-system` copies the ones you already have; `den-doctor`
-lists which of Den's defaults are present.
+lists which of Play's defaults are present.
 
 ## Controls
 
-A gamepad you plug in is **Player 1** by the time you look at it — Den asks
+A gamepad you plug in is **Player 1** by the time you look at it — Play asks
 the kernel what the device is rather than matching its name, assigns the
 lowest free player, and remembers that pad by vendor, product and name so it
 keeps its number when you unplug it and bring it back. The Controllers screen
@@ -149,27 +152,40 @@ There is always a keyboard, whether or not a pad turned up:
 | D-pad | arrow keys | | Start | <kbd>Enter</kbd> |
 | B / A | <kbd>Z</kbd> <kbd>X</kbd> | | Select | <kbd>Right Shift</kbd> |
 | Y / X | <kbd>A</kbd> <kbd>S</kbd> | | RetroArch menu | <kbd>F1</kbd> |
-| L / R | <kbd>Q</kbd> <kbd>W</kbd> | | Quit back to Den | <kbd>Esc</kbd> |
+| L / R | <kbd>Q</kbd> <kbd>W</kbd> | | Quit back to Play | <kbd>Esc</kbd> |
 | Save / load state | <kbd>F2</kbd> <kbd>F4</kbd> | | Fullscreen | <kbd>F11</kbd> |
 
-Den writes these into the config it hands RetroArch and shows the same table
+Play writes these into the config it hands RetroArch and shows the same table
 on the Controllers screen, both from one table in `den-runner`, so what is on
 screen is what the keys do. Everything else in your RetroArch configuration
 is inherited untouched.
 
+## From the couch
+
+While the desktop app is open it also serves the shelf to every device on
+your network, at **port 5555** — the same idea as its sibling Watch on 7777,
+Chat on 8888, and Write on 9999. Open `http://<the machine's address>:5555`
+on a phone or tablet, filter the shelf, tap a game, and it starts on the
+machine the library lives on — the one plugged into the TV. The page can
+read the shelf and start what is already on it, nothing else.
+
+`DEN_WEB_PORT` moves it, `DEN_WEB_PORT=0` turns it off, and
+`DEN_WEB_BIND=127.0.0.1` keeps it to the one machine. The exact addresses
+are printed to the log at startup.
+
 ## Running it
 
-On first launch Den creates a library under your platform's data directory
+On first launch Play creates a library under your platform's data directory
 (`~/.local/share/den` on Linux) and opens on an empty shelf. Go to **Intake**,
 press the drop zone or **Choose a folder…**, and point it at a folder of
 downloads. Everything is copied into the library; the originals are left
 exactly as they were.
 
-**BIOS files are your own.** Den recognises and files the common ones by name
+**BIOS files are your own.** Play recognises and files the common ones by name
 and by hash; it does not ship any.
 
 PlayStation 2, GameCube, and Wii are shelved and named but not launched — they
-need external emulator profiles that are not wired yet, and Den says so rather
+need external emulator profiles that are not wired yet, and Play says so rather
 than failing quietly.
 
 ## Licence
