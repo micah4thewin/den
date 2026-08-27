@@ -69,6 +69,20 @@ npm run tauri dev               # the app
 npm run deb                     # a .deb
 ```
 
+`npm run tauri build` asks for the `.deb` and the AppImage together. The
+AppImage step runs `linuxdeploy`, which is not a system package — Tauri
+downloads it into `~/.cache/tauri` and runs it, and since it is itself an
+AppImage it needs FUSE 2: `sudo apt install libfuse2t64` on Ubuntu 24.04
+(`libfuse2` on older releases), plus `patchelf`, `file`, and
+`librsvg2-dev`. When that step fails with "failed to run linuxdeploy",
+the `.deb` has already been written and installs on its own; a
+half-downloaded tool fails the same way, and deleting `~/.cache/tauri`
+makes the next build fetch it fresh. `npm run deb` skips the AppImage
+entirely. One more note for machines that installed a build from before
+the rename: the package used to be called `den` and is now `play`, and
+both carry `/usr/bin/den-desktop`, so `sudo apt remove den` clears the
+way for the first `play` install.
+
 The application icons are generated, never hand-drawn. To change the mark,
 edit `tools/brand.py`, then:
 
