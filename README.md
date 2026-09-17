@@ -220,11 +220,21 @@ in front of it.
 ### On the phone
 
 Open the shelf in Chrome and use **Add to Home Screen**. Play serves a web app
-manifest and its own icons, so it lands beside your other apps and opens
-without browser chrome. It keeps its own page cached, so the app still opens
-when the machine is asleep — it will say it cannot reach the shelf rather than
-failing to load at all. On a plain `http://` address Android installs it as a
-shortcut; behind `tailscale serve` it installs as an app.
+manifest and its own icons — including maskable ones, so Android's launcher
+shapes the mark instead of putting it in a white box — and it lands beside
+your other apps.
+
+How far that goes depends on the address. A browser only installs an app, and
+only runs a service worker, on a secure origin, so:
+
+- **`http://<address>:5555`** — the home-screen icon is a shortcut that opens
+  in a browser tab. Everything works; it is a tab.
+- **`https://<machine>.<tailnet>.ts.net`**, behind `tailscale serve` — a real
+  install: no browser chrome, and the worker keeps the app's own page, so it
+  still opens when the machine is asleep and says it cannot reach the shelf
+  rather than failing to load at all. The worker never caches the shelf
+  itself, only the page around it, so what you see is always what the machine
+  says right now.
 
 ### Who may talk to it
 

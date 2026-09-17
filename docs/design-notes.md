@@ -39,6 +39,28 @@ It is the same drawing in both places, not two that resemble each other.
   chrome around it has no accent colour anywhere, which is why a tile with no
   art still reads: the title sits on the quiet tile in its place.
 
+## The remote is the same interface, read with a thumb
+
+The shelf Play serves to the network (`crates/den-web/web/`) is a standalone
+page: it cannot read `tokens.css`, so it carries the same seeds embedded, as
+the document allows. Everything else is the system — greyscale, the same three
+materials, the same square radii, status in words.
+
+Two things a phone needs that the desktop does not:
+
+- **Nothing you press is smaller than a thumb.** One `--tap` token, 2.75rem,
+  floors every button and the filter field. The search field is held at 16px
+  besides, because a smaller one makes iOS zoom the page on focus and the
+  shelf jumps sideways.
+- **A sheet, not a screen.** The desktop has room for a Game screen; the phone
+  gets the same facts in a `<dialog>` that comes up from the bottom edge and a
+  card in the middle above 40rem. It is the same content and the same
+  vocabulary — the core named, the saves counted, the reason Play cannot start
+  something written out rather than a disabled button with no explanation.
+
+The mark in the page's header is the same `brandDen` path data, inline, so the
+remote cannot drift from the app it is a remote for.
+
 ## Status is a word, in this program too
 
 The intake report card is the clearest case in this program: eight outcomes,

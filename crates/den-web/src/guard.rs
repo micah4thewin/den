@@ -88,10 +88,9 @@ pub fn name_is_ours(name: &str) -> bool {
 }
 
 fn changes_something(method: &str) -> bool {
-    !matches!(
-        method.to_ascii_uppercase().as_str(),
-        "GET" | "HEAD" | "OPTIONS" | "TRACE"
-    )
+    !["GET", "HEAD", "OPTIONS", "TRACE"]
+        .iter()
+        .any(|safe| method.eq_ignore_ascii_case(safe))
 }
 
 /// The reason to refuse this request, in the words Play would say, or nothing

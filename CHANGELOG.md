@@ -56,7 +56,10 @@ the build plan's milestones, not semver.
   and never caches `/api/`, so a phone cannot run last week's page against
   this week's shelf; the cache exists only so the app still opens when the
   machine is asleep, and says it cannot reach the shelf rather than failing to
-  load. The icons are generated from `tools/brand.py` like every other one,
+  load. A browser gives a worker and a real install only on a secure origin,
+  so a plain `http://` address gets a shortcut and `tailscale serve` in front
+  of it gets the app — the README says which is which. The icons are
+  generated from `tools/brand.py` like every other one,
   and `tools/check_brand.py` now checks all of them from one list instead of a
   second copy of it.
 - **The remote narrows to one system.** The systems and their counts were

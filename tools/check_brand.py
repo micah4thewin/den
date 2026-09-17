@@ -13,6 +13,7 @@ import generate_icons  # noqa: E402
 MARK = "den"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICONS_TS = os.path.join(ROOT, "apps", "desktop", "src", "ui", "icons.ts")
+REMOTE_HTML = os.path.join(ROOT, "crates", "den-web", "web", "index.html")
 
 
 def normalize(d):
@@ -38,6 +39,22 @@ def interface_paths():
     body = bracketed(source, "brandDen: [")
     body = re.sub(r'"\s*\+\s*"', "", body)
     return [normalize(m) for m in re.findall(r'"((?:M|m)[^"]*)"', body)]
+
+
+def remote_paths():
+    """The mark inlined in the page Play serves to the network.
+
+    It cannot import anything — a standalone page has no bundler — so the
+    drawing is written out there, and this is what keeps it the same drawing.
+    """
+    source = open(REMOTE_HTML, encoding="utf-8").read()
+    start = source.find('class="mark"')
+    if start < 0:
+        return []
+    end = source.find("</svg>", start)
+    if end < 0:
+        return []
+    return [normalize(d) for d in re.findall(r'\sd="([^"]*)"', source[start:end])]
 
 
 def sheet_paths():
@@ -69,6 +86,15 @@ def main():
     elif drawn != sheet:
         problems.append(
             "brandDen in icons.ts differs from brand.py; re-run generate_icons.py"
+        )
+
+    remote = remote_paths()
+    if not remote:
+        problems.append(f"could not find the mark in {REMOTE_HTML}")
+    elif remote != sheet:
+        problems.append(
+            "the mark in den-web/web/index.html differs from brand.py; "
+            "copy the paths across"
         )
 
     problems.extend(_check_generated())
