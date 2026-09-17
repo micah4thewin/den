@@ -13,8 +13,6 @@ import generate_icons  # noqa: E402
 MARK = "den"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICONS_TS = os.path.join(ROOT, "apps", "desktop", "src", "ui", "icons.ts")
-ICONS_DIR = os.path.join(ROOT, "apps", "desktop", "src-tauri", "icons")
-PUBLIC_DIR = os.path.join(ROOT, "apps", "desktop", "public")
 
 
 def normalize(d):
@@ -47,24 +45,9 @@ def sheet_paths():
 
 
 def _check_generated():
+    """Every generated file, against what the brand sheet says it should be."""
     problems = []
-    tiles = brand.render(MARK, generate_icons.SIZES)
-    encoded = {size: brand.png(rows, size) for size, rows in tiles.items()}
-    expected = {
-        os.path.join(ICONS_DIR, "32x32.png"): encoded[32],
-        os.path.join(ICONS_DIR, "64x64.png"): encoded[64],
-        os.path.join(ICONS_DIR, "128x128.png"): encoded[128],
-        os.path.join(ICONS_DIR, "128x128@2x.png"): encoded[256],
-        os.path.join(ICONS_DIR, "icon.png"): encoded[512],
-        os.path.join(ICONS_DIR, "icon.ico"): brand.ico(
-            [(s, encoded[s]) for s in (32, 64, 128, 256)]
-        ),
-        os.path.join(ICONS_DIR, "icon.icns"): brand.icns(
-            [(s, encoded[s]) for s in (32, 128, 256, 512)]
-        ),
-        os.path.join(PUBLIC_DIR, "brand-mark.svg"): brand.svg(MARK).encode("utf-8"),
-    }
-    for path, data in expected.items():
+    for path, data in generate_icons.generated().items():
         if not os.path.isfile(path):
             problems.append(f"missing {os.path.relpath(path, ROOT)}")
             continue

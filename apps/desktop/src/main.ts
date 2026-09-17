@@ -3,6 +3,7 @@ import { $, el, showScreen, toast } from "./dom";
 import { chooseAndIntake, wireDrop } from "./intake";
 import { renderLibrary } from "./library";
 import { icon } from "./ui/icons";
+import type { Reachable } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 
 function injectIcons(): void {
@@ -46,9 +47,12 @@ function wireNavigation(): void {
 
 async function showRemoteUrl(): Promise<void> {
   try {
-    const urls = await invoke<string[]>("web_remote_urls");
-    if (urls.length > 0) {
-      $<HTMLElement>("remote-url").textContent = `On this network: ${urls[0]}`;
+    const rows = await invoke<Reachable[]>("web_remote_urls");
+    const box = $<HTMLElement>("remote-url");
+    box.replaceChildren();
+    // One line per way in: the house network, and the tailnet if there is one.
+    for (const row of rows) {
+      box.appendChild(el("span", "remote-row", `${row.reach}: ${row.url}`));
     }
   } catch {
     // The shelf works the same with or without the remote.

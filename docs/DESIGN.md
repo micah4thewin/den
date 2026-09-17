@@ -76,8 +76,8 @@ Hearth has no such case and therefore has no such exception.
 and it is the only stylesheet the application chrome reads that holds a
 colour literal. Standalone pages a program serves or exports carry their
 own embedded copy of the palette, because nothing guarantees them the
-token file — hearth's remote client, lockbox's verifier and portal — and
-what they embed is the same greys. (Lockbox's whiteboard palette and its
+token file — hearth's remote client, den's remote, lockbox's verifier and
+portal — and what they embed is the same greys. (Lockbox's whiteboard palette and its
 print-only recovery sheet are its recorded exceptions; its own notes say
 where and why.) Two layers:
 

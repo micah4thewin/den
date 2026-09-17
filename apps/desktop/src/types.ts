@@ -57,6 +57,17 @@ export interface GameView {
   saves: Save[];
   retroarch: RetroArchStatus;
   core: CoreStatus;
+  playing: boolean;
+}
+
+/** An address the remote answers on, and where that address works. */
+export interface Reachable {
+  url: string;
+  reach: string;
+}
+
+export interface Stopped {
+  stopped: number;
 }
 
 export interface Outcome {

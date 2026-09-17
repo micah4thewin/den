@@ -37,13 +37,13 @@ crates/den-db        SQLite (WAL): games, saves, sessions, BIOS, reports
 crates/den-runner    RetroArch process control and per-session config
 crates/den-input     controller detection
 crates/den-core      the one object the shell talks to
-crates/den-web       the LAN remote: the shelf in any browser on your network
+crates/den-web       the remote: the shelf in any browser on your network or tailnet
 crates/den-doctor    `den-doctor`: what Play can and cannot find on this machine
 apps/desktop         the Tauri v2 shell: four screens over a typed IPC layer
 tools/               the brand sheet, the icon generator, the runtime bundler
 ```
 
-The seven crates are one Cargo workspace and build headless: no WebView, no
+The eight crates are one Cargo workspace and build headless: no WebView, no
 window, no system packages. The shell is deliberately *outside* that
 workspace, in `apps/desktop/src-tauri`, so the crates can be tested on any
 machine and in CI without dragging platform GUI dependencies in.
@@ -53,7 +53,7 @@ machine and in CI without dragging platform GUI dependencies in.
 The core workspace needs nothing but a Rust toolchain:
 
 ```sh
-cargo test --workspace          # 99 tests, headless
+cargo test --workspace          # 130 tests, headless
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 ```
@@ -179,13 +179,82 @@ is inherited untouched.
 While the desktop app is open it also serves the shelf to every device on
 your network, at **port 5555** — the same idea as its sibling Watch on 7777,
 Chat on 8888, and Write on 9999. Open `http://<the machine's address>:5555`
-on a phone or tablet, filter the shelf, tap a game, and it starts on the
-machine the library lives on — the one plugged into the TV. The page can
-read the shelf and start what is already on it, nothing else.
+on a phone or tablet: filter the shelf, narrow it to one system, tap a game
+to see what it is, and start it on the machine the library lives on — the one
+plugged into the TV. What is playing sits at the top of the page with a
+**Stop** beside it, so getting back out of a game does not mean getting up.
 
-`DEN_WEB_PORT` moves it, `DEN_WEB_PORT=0` turns it off, and
-`DEN_WEB_BIND=127.0.0.1` keeps it to the one machine. The exact addresses
-are printed to the log at startup.
+Stopping asks RetroArch to quit rather than killing it, the same shutdown
+<kbd>Esc</kbd> gives, so the save is written on the way out.
+
+**The phone is the remote, not the screen.** The game runs on the machine the
+library lives on and comes out of that machine's television. Play does not
+stream video, and the page cannot press buttons — a controller or the keyboard
+does that, at the machine.
+
+The Library screen lists every address the remote answers on, each said with
+where it works, and the same lines go to the log at startup.
+
+### Over Tailscale
+
+If the machine is on a tailnet, the remote is already on it: it listens on
+every interface, and Play finds and prints the `100.x.y.z` address alongside
+the one on your house network. From a phone signed in to the same tailnet,
+`http://100.x.y.z:5555` reaches the shelf from anywhere. MagicDNS short names
+work too — `http://<machine>:5555`.
+
+For the better version of it, put the remote behind Tailscale's own HTTPS:
+
+```sh
+tailscale serve --bg 5555
+```
+
+That publishes it at `https://<machine>.<tailnet>.ts.net`, which is a secure
+origin — so Android will offer to install the shelf properly rather than
+bookmark it (see below), and the address is a name you can remember.
+
+To keep the remote *only* on the tailnet, bind it to the tailnet address:
+`DEN_WEB_BIND=100.x.y.z`, or `DEN_WEB_BIND=127.0.0.1` with `tailscale serve`
+in front of it.
+
+### On the phone
+
+Open the shelf in Chrome and use **Add to Home Screen**. Play serves a web app
+manifest and its own icons, so it lands beside your other apps and opens
+without browser chrome. It keeps its own page cached, so the app still opens
+when the machine is asleep — it will say it cannot reach the shelf rather than
+failing to load at all. On a plain `http://` address Android installs it as a
+shortcut; behind `tailscale serve` it installs as an app.
+
+### Who may talk to it
+
+The remote has no password: anything already on the network may read the shelf
+and start or stop what is on it, the same trust the family's media server
+extends. Two things are refused, and both cost one header to check:
+
+- **A name that is not ours.** Anyone can point a public name at a private
+  address and serve you a page the browser then treats as Play's own. Play
+  answers to addresses, to names with no dot in them, and to `.ts.net`,
+  `.local`, `.internal` and `.lan`. `DEN_WEB_HOSTS=games.example.com` adds
+  your own.
+- **A press from somebody else's page.** A tab open on an unrelated site can
+  post to a private address without being able to read the answer, which is
+  enough to start a game on your television. Anything that changes something
+  has to come from Play's own page.
+
+`DEN_WEB_PORT` moves the remote, `DEN_WEB_PORT=0` turns it off, and
+`DEN_WEB_BIND` narrows what it listens on.
+
+### Working on it
+
+The remote's page is the one part of Play that needs a browser to look at,
+and the desktop shell needs system packages a headless machine will not have.
+It can be served on its own, from the same code the app runs:
+
+```sh
+cargo run -p den-web --example shelf              # the real library
+cargo run -p den-web --example shelf -- /some/den # another one
+```
 
 ## Running it
 

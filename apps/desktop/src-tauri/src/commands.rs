@@ -1,6 +1,7 @@
 use crate::{with_den, AppState, CommandResult};
 use den_core::{ControllerInfo, KeyBinding, LaunchInfo, Report, RetroArchStatus};
 use den_web::views::{game_view, library_view, GameView, LibraryView};
+use den_web::Reachable;
 use serde::Serialize;
 use std::path::Path;
 use tauri::State;
@@ -16,9 +17,9 @@ pub(crate) fn get_game(state: State<'_, AppState>, id: i64) -> CommandResult<Gam
 }
 
 #[tauri::command]
-pub(crate) fn web_remote_urls() -> CommandResult<Vec<String>> {
+pub(crate) fn web_remote_urls() -> CommandResult<Vec<Reachable>> {
     Ok(match den_web::addr_from_env() {
-        Some(addr) => den_web::reachable_urls(addr),
+        Some(addr) => den_web::reachable(addr),
         None => Vec::new(),
     })
 }
@@ -26,6 +27,20 @@ pub(crate) fn web_remote_urls() -> CommandResult<Vec<String>> {
 #[tauri::command]
 pub(crate) fn launch_game(state: State<'_, AppState>, id: i64) -> CommandResult<LaunchInfo> {
     with_den(&state, |den| den.launch(id).map_err(|e| e.to_string()))
+}
+
+#[derive(Serialize)]
+pub(crate) struct StoppedView {
+    pub(crate) stopped: usize,
+}
+
+#[tauri::command]
+pub(crate) fn stop_game(state: State<'_, AppState>, id: i64) -> CommandResult<StoppedView> {
+    with_den(&state, |den| {
+        Ok(StoppedView {
+            stopped: den.stop(id),
+        })
+    })
 }
 
 #[tauri::command]

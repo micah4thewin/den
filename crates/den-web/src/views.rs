@@ -23,6 +23,9 @@ pub struct GameView {
     pub saves: Vec<Save>,
     pub retroarch: RetroArchStatus,
     pub core: CoreStatus,
+    /// Whether this one is playing right now, so a screen can offer to stop it
+    /// rather than offering to start it a second time.
+    pub playing: bool,
 }
 
 pub fn library_view(den: &Den) -> Result<LibraryView, String> {
@@ -56,10 +59,12 @@ pub fn game_view(den: &Den, id: i64) -> Result<GameView, String> {
         .ok_or("game not found")?;
     let saves = den.db().list_saves(id).map_err(|e| e.to_string())?;
     let core = den.core_status(&game);
+    let playing = den.running().iter().any(|live| live.game_id == id);
     Ok(GameView {
         game,
         saves,
         retroarch: den.retroarch_status(),
         core,
+        playing,
     })
 }

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { $, el, showScreen, toast } from "./dom";
 import { pickRetroArch } from "./library";
 import { icon } from "./ui/icons";
-import type { GameView } from "./types";
+import type { GameView, Stopped } from "./types";
 
 export async function openGame(id: number): Promise<void> {
   try {
@@ -47,22 +47,41 @@ function renderGame(view: GameView): void {
   meta.appendChild(el("div", "system-word", view.game.system));
 
   const playRow = el("div", "play-row");
-  const play = el("button", "primary", "Play");
+  const play = el("button", "primary", view.playing ? "Playing" : "Play");
   const playIcon = icon("play");
   if (playIcon) play.prepend(playIcon);
   const blocked = playBlockedBecause(view);
-  play.disabled = blocked !== null;
+  // One game, one process: while it is playing there is a Stop, not a Play.
+  play.disabled = blocked !== null || view.playing;
   play.addEventListener("click", () => {
     void (async () => {
       try {
         const info = await invoke<{ pid: number; core: string }>("launch_game", { id: view.game.id });
         toast(`Launched with ${info.core}`);
+        await openGame(view.game.id);
       } catch (error) {
         toast(String(error));
       }
     })();
   });
   playRow.appendChild(play);
+
+  if (view.playing) {
+    const stop = el("button", "ghost", "Stop");
+    stop.type = "button";
+    stop.addEventListener("click", () => {
+      void (async () => {
+        try {
+          const answer = await invoke<Stopped>("stop_game", { id: view.game.id });
+          toast(answer.stopped > 0 ? `Stopped ${view.game.title}` : "It had already finished");
+          await openGame(view.game.id);
+        } catch (error) {
+          toast(String(error));
+        }
+      })();
+    });
+    playRow.appendChild(stop);
+  }
   if (blocked) {
     const note = el("span", "quiet play-note", blocked.reason);
     note.id = `play-reason-${view.game.id}`;

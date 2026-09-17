@@ -95,8 +95,25 @@ const PAD_NOBODY: &str = "none";
 pub use den_runner::MAX_PLAYERS;
 
 struct Live {
+    game_id: i64,
+    title: String,
+    system: String,
+    started: i64,
     session_id: Option<i64>,
     process: Running,
+}
+
+/// A game that is playing right now, as the remote needs to see it.
+#[derive(Debug, Serialize)]
+pub struct RunningGame {
+    pub game_id: i64,
+    pub title: String,
+    pub system: String,
+    pub pid: u32,
+    pub started: i64,
+    /// How long it has been playing. The phone asking may not keep the same
+    /// clock as the machine answering, so the machine does the subtraction.
+    pub seconds: i64,
 }
 
 pub struct Den {
@@ -166,7 +183,16 @@ impl Den {
             return Err(Error::External(game.system.clone()));
         }
         let core = core_for(&game);
-        self.reap();
+        // One game, one process: a second copy would share this game's config
+        // file and its save RAM with the first, and the loser of that race
+        // takes the session with it. A double-tap on the remote is the usual
+        // way to ask for this.
+        if self.running().iter().any(|live| live.game_id == game_id) {
+            return Err(Error::Unusable(format!(
+                "{} is already running",
+                game.title
+            )));
+        }
         let players = self.player_bindings();
         let process = self.runner.launch(&game, &core, &players)?;
         let pid = process.pid();
@@ -179,6 +205,10 @@ impl Den {
         };
         if let Ok(mut live) = self.live.lock() {
             live.push(Live {
+                game_id,
+                title: game.title.clone(),
+                system: game.system.clone(),
+                started: den_db::now(),
                 session_id,
                 process,
             });
@@ -209,8 +239,67 @@ impl Den {
     }
 
     pub fn running_count(&self) -> usize {
+        self.running().len()
+    }
+
+    /// What is playing, oldest first.
+    pub fn running(&self) -> Vec<RunningGame> {
         self.reap();
-        self.live.lock().map(|live| live.len()).unwrap_or(0)
+        let Ok(live) = self.live.lock() else {
+            return Vec::new();
+        };
+        let now = den_db::now();
+        live.iter()
+            .map(|entry| RunningGame {
+                game_id: entry.game_id,
+                title: entry.title.clone(),
+                system: entry.system.clone(),
+                pid: entry.process.pid(),
+                started: entry.started,
+                seconds: (now - entry.started).max(0),
+            })
+            .collect()
+    }
+
+    /// Quit a game the way Escape would, so RetroArch saves on the way out.
+    /// Answers with how many processes went; nothing running is not an error,
+    /// because a game that ended on its own is the outcome that was asked for.
+    pub fn stop(&self, game_id: i64) -> usize {
+        self.stop_matching(|entry| entry.game_id == game_id)
+    }
+
+    /// Quit everything, for the remote's "stop what is playing" with no game
+    /// named — which is what someone reaching for their phone usually means.
+    pub fn stop_all(&self) -> usize {
+        self.stop_matching(|_| true)
+    }
+
+    fn stop_matching(&self, wanted: impl Fn(&Live) -> bool) -> usize {
+        let mut going = Vec::new();
+        {
+            let Ok(mut live) = self.live.lock() else {
+                return 0;
+            };
+            let mut keep = Vec::with_capacity(live.len());
+            for entry in live.drain(..) {
+                if wanted(&entry) {
+                    going.push(entry);
+                } else {
+                    keep.push(entry);
+                }
+            }
+            *live = keep;
+        }
+        let stopped = going.len();
+        for mut entry in going {
+            if let Err(e) = entry.process.quit() {
+                eprintln!("play: could not stop {}: {e}", entry.title);
+            }
+            if let Some(session_id) = entry.session_id {
+                let _ = self.db.end_session(session_id);
+            }
+        }
+        stopped
     }
 
     pub fn controllers(&self) -> Vec<ControllerInfo> {

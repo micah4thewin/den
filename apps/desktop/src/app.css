@@ -71,6 +71,14 @@
   word-break: break-all;
 }
 
+.sidebar .remote-row {
+  display: block;
+}
+
+.sidebar .remote-row + .remote-row {
+  margin-top: var(--gap-1);
+}
+
 .main {
   flex: 1 1 auto;
   display: flex;

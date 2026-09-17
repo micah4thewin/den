@@ -16,6 +16,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+env_logger.workspace = true
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 

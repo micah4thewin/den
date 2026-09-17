@@ -11,6 +11,15 @@ the build plan's milestones, not semver.
   core workspace.
 
 ### Changed
+- **Play finds the address it has on your tailnet**, and says where each
+  address works rather than assuming one network. The route probes now include
+  Tailscale's `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, and every address the
+  remote answers on is reported with a word — `this network`, `your tailnet`,
+  `this machine`. The desktop sidebar lists all of them; it used to show the
+  first one and call it "On this network".
+- **One game, one process.** Launching a game that is already playing is
+  refused by name instead of starting a second copy over the first one's
+  config file and save RAM — which is what a double-tap on a phone used to do.
 - **The program ships under the name Play.** Window title, installer
   name, wordmark, and every user-facing string say Play; the `den-*`
   crates, the library directory (`~/.local/share/den`), and the `DEN_*`
@@ -22,7 +31,43 @@ the build plan's milestones, not semver.
   so buttons, tiles, and cards sit closer to right angles, and the intake
   status word trades its pill for a square-cornered tag.
 
+### Security
+- **The remote answers to addresses and private names, not to any name
+  pointed at it.** Anyone can aim `games.example.com` at a private address and
+  serve a page the browser then treats as Play's own; Play now answers only to
+  address literals, names with no dot, and the `.ts.net`, `.local`,
+  `.internal` and `.lan` suffixes. `DEN_WEB_HOSTS` adds your own.
+- **Starting or stopping a game has to come from Play's own page.** A tab open
+  on an unrelated site could post to a private address without being able to
+  read the answer — enough to start a game on somebody's television. A
+  state-changing request whose `Origin` is not the shelf is refused; one with
+  no `Origin` at all is somebody at a keyboard, and goes through.
+
 ### Added
+- **The remote can stop what it started.** `/api/status` names what is
+  playing and for how long, `/api/stop/{id}` and `/api/stop` end it, and the
+  page carries a sticky bar with the game and one **Stop** beside it. Stopping
+  sends `SIGTERM` and waits, the same shutdown <kbd>Esc</kbd> gives, so
+  RetroArch writes its save RAM and exit state on the way out; a kill only
+  follows if it will not go. The desktop Game screen has the same Stop.
+- **The shelf installs on a phone.** A web app manifest, a service worker, and
+  home-screen icons — including maskable ones, so Android's launcher shapes
+  the mark instead of letterboxing it. The worker goes to the network first
+  and never caches `/api/`, so a phone cannot run last week's page against
+  this week's shelf; the cache exists only so the app still opens when the
+  machine is asleep, and says it cannot reach the shelf rather than failing to
+  load. The icons are generated from `tools/brand.py` like every other one,
+  and `tools/check_brand.py` now checks all of them from one list instead of a
+  second copy of it.
+- **The remote narrows to one system.** The systems and their counts were
+  already being served and never shown; they are chips above the shelf now.
+- **A game opens before it starts.** Tapping a tile on the remote opens a
+  sheet with the system, size, core, saves and time played, and a **Play on
+  the machine** that is disabled with the reason written out when RetroArch or
+  the core is missing — rather than launching on the first accidental tap.
+- `cargo run -p den-web --example shelf` serves a library on its own. The
+  remote's page is the one part of Play that needs a browser to look at, and
+  the desktop shell needs system packages a headless machine will not have.
 - `crates/den-web` — the LAN remote: while the desktop app is open it
   serves the shelf to every browser on the network at `0.0.0.0:5555` —
   filter the shelf, tap a game, and it starts on the machine the library
@@ -97,6 +142,15 @@ the build plan's milestones, not semver.
   and for the glue object and its sessions (`crates/den-core/tests`).
 
 ### Fixed
+- **`hidden` did nothing** on the remote's playing and trouble bars: an
+  author's `display: flex` beats the browser's rule for `[hidden]`, so an
+  empty strip sat under the header whenever nothing was playing.
+- **59 minutes and 59 seconds played** rounded to "60m played" rather than
+  "1h 0m".
+- The remote polls on a schedule that suits what it is waiting for — often
+  while a game is playing, rarely while none is, not at all while the phone is
+  in a pocket — and rebuilds the shelf only when what is playing changes,
+  rather than under a thumb every fifteen seconds.
 - **The report card broke its own vocabulary.** The eight promised words are
   lowercase — `added`, `duplicate`, `repaired` — and the pills and tally said
   `Added`, `Duplicate`, `Repaired`, because the serialized variant name leaked

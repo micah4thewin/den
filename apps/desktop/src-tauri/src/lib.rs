@@ -55,6 +55,7 @@ pub fn run() {
             commands::web_remote_urls,
             commands::get_game,
             commands::launch_game,
+            commands::stop_game,
             commands::run_intake,
             commands::list_controllers,
             commands::choose_folder,
