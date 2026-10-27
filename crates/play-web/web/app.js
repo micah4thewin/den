@@ -305,6 +305,19 @@ function sheetFor(view) {
   });
   actions.appendChild(go);
 
+  // The game in this browser, on this screen, with touch controls: nothing
+  // needs to be playing on the machine for it, so nothing there blocks it.
+  const here = el("button", "btn loud", "Play on this phone");
+  here.type = "button";
+  here.disabled = Boolean(view.phone && view.phone.problem);
+  here.addEventListener("click", () => {
+    location.href = `/phone?id=${game.id}`;
+  });
+  actions.appendChild(here);
+  if (view.phone && view.phone.problem) {
+    actions.appendChild(el("p", "quiet", view.phone.problem));
+  }
+
   const row = el("div", "row");
   if (playing) {
     const stop = el("button", "btn", "Stop");
