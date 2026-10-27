@@ -44,7 +44,7 @@ def log(message):
 
 
 def system_candidates():
-    """The same list den-runner walks, kept deliberately in step with it."""
+    """The same list play-runner walks, kept deliberately in step with it."""
     out = []
     for directory in os.environ.get("PATH", "").split(os.pathsep):
         if not directory:
@@ -332,7 +332,7 @@ def stage_from_manifest(dest, want_cores, record, force, manifest_path):
     expected = entry.get("sha256")
     log(f"  fetching {url}")
 
-    handle, tmp = tempfile.mkstemp(prefix="den-runtime-", suffix=archive_suffix(url))
+    handle, tmp = tempfile.mkstemp(prefix="play-runtime-", suffix=archive_suffix(url))
     os.close(handle)
     try:
         with urllib.request.urlopen(url, timeout=120) as response, open(tmp, "wb") as out:

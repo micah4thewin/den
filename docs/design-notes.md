@@ -1,7 +1,7 @@
-# Play (den) and the shared design system
+# Play and the shared design system
 
 [`DESIGN.md`](DESIGN.md) beside this file is the family document, byte-identical
-in the lockbox, hearth, and den repositories. It describes the system and names
+in the lockbox, hearth, and play repositories. It describes the system and names
 all four programs; this note is Play's adaptation, in the same spirit as
 lanflix's — only the places where a launcher differs.
 
@@ -12,7 +12,7 @@ materials, one icon geometry, a container holding one emblem.
 
 **Play** is a CRT with a play triangle in it — a container holding one emblem,
 like its siblings: a place games are played. Its path data lives in `tools/brand.py` alongside its
-siblings and is drawn in the interface by `brandDen` in
+siblings and is drawn in the interface by `brandPlay` in
 `apps/desktop/src/ui/icons.ts`. `tools/check_brand.py` compares the two path
 by path, re-renders the committed icons, and fails CI on either kind of drift.
 It is the same drawing in both places, not two that resemble each other.
@@ -41,7 +41,7 @@ It is the same drawing in both places, not two that resemble each other.
 
 ## The remote is the same interface, read with a thumb
 
-The shelf Play serves to the network (`crates/den-web/web/`) is a standalone
+The shelf Play serves to the network (`crates/play-web/web/`) is a standalone
 page: it cannot read `tokens.css`, so it carries the same seeds embedded, as
 the document allows. Everything else is the system — greyscale, the same three
 materials, the same square radii, status in words.
@@ -58,7 +58,7 @@ Two things a phone needs that the desktop does not:
   vocabulary — the core named, the saves counted, the reason Play cannot start
   something written out rather than a disabled button with no explanation.
 
-The mark in the page's header is the same `brandDen` path data, inline, so the
+The mark in the page's header is the same `brandPlay` path data, inline, so the
 remote cannot drift from the app it is a remote for.
 
 ## Status is a word, in this program too

@@ -10,10 +10,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import brand  # noqa: E402
 import generate_icons  # noqa: E402
 
-MARK = "den"
+MARK = "play"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICONS_TS = os.path.join(ROOT, "apps", "desktop", "src", "ui", "icons.ts")
-REMOTE_HTML = os.path.join(ROOT, "crates", "den-web", "web", "index.html")
+REMOTE_HTML = os.path.join(ROOT, "crates", "play-web", "web", "index.html")
 
 
 def normalize(d):
@@ -36,7 +36,7 @@ def bracketed(source, key):
 
 def interface_paths():
     source = open(ICONS_TS, encoding="utf-8").read()
-    body = bracketed(source, "brandDen: [")
+    body = bracketed(source, "brandPlay: [")
     body = re.sub(r'"\s*\+\s*"', "", body)
     return [normalize(m) for m in re.findall(r'"((?:M|m)[^"]*)"', body)]
 
@@ -82,10 +82,10 @@ def main():
     drawn = interface_paths()
     sheet = sheet_paths()
     if not drawn:
-        problems.append(f"could not find brandDen path data in {ICONS_TS}")
+        problems.append(f"could not find brandPlay path data in {ICONS_TS}")
     elif drawn != sheet:
         problems.append(
-            "brandDen in icons.ts differs from brand.py; re-run generate_icons.py"
+            "brandPlay in icons.ts differs from brand.py; re-run generate_icons.py"
         )
 
     remote = remote_paths()
@@ -93,7 +93,7 @@ def main():
         problems.append(f"could not find the mark in {REMOTE_HTML}")
     elif remote != sheet:
         problems.append(
-            "the mark in den-web/web/index.html differs from brand.py; "
+            "the mark in play-web/web/index.html differs from brand.py; "
             "copy the paths across"
         )
 

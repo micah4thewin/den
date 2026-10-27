@@ -1,5 +1,5 @@
 {
-  "name": "den-desktop",
+  "name": "play-desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "bundle:runtime": "node ../../tools/run-python.mjs ../../tools/bundle_runtime.py --allow-missing --keep-existing",
     "runtime:check": "node ../../tools/run-python.mjs ../../tools/bundle_runtime.py --check",
-    "doctor": "cargo run -q -p den-doctor --manifest-path ../../Cargo.toml"
+    "doctor": "cargo run -q -p play-doctor --manifest-path ../../Cargo.toml"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0"

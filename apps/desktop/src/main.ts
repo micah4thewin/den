@@ -13,7 +13,7 @@ function injectIcons(): void {
     const glyph = icon(name);
     if (glyph) target.replaceWith(glyph);
   }
-  const mark = icon("brandDen");
+  const mark = icon("brandPlay");
   if (mark) $<HTMLElement>("brand-mark").appendChild(mark);
 }
 

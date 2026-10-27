@@ -8,11 +8,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import brand  # noqa: E402
 
-MARK = "den"
+MARK = "play"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICONS = os.path.join(ROOT, "apps", "desktop", "src-tauri", "icons")
 PUBLIC = os.path.join(ROOT, "apps", "desktop", "public")
-WEB = os.path.join(ROOT, "crates", "den-web", "web")
+WEB = os.path.join(ROOT, "crates", "play-web", "web")
 
 SIZES = [32, 64, 128, 192, 256, 512]
 

@@ -1,32 +1,32 @@
-use crate::{with_den, AppState, CommandResult};
-use den_core::{ControllerInfo, KeyBinding, LaunchInfo, Report, RetroArchStatus};
-use den_web::views::{game_view, library_view, GameView, LibraryView};
-use den_web::Reachable;
+use crate::{with_play, AppState, CommandResult};
+use play_core::{ControllerInfo, KeyBinding, LaunchInfo, Report, RetroArchStatus};
+use play_web::views::{game_view, library_view, GameView, LibraryView};
+use play_web::Reachable;
 use serde::Serialize;
 use std::path::Path;
 use tauri::State;
 
 #[tauri::command]
 pub(crate) fn get_library(state: State<'_, AppState>) -> CommandResult<LibraryView> {
-    with_den(&state, library_view)
+    with_play(&state, library_view)
 }
 
 #[tauri::command]
 pub(crate) fn get_game(state: State<'_, AppState>, id: i64) -> CommandResult<GameView> {
-    with_den(&state, |den| game_view(den, id))
+    with_play(&state, |play| game_view(play, id))
 }
 
 #[tauri::command]
 pub(crate) fn web_remote_urls() -> CommandResult<Vec<Reachable>> {
-    Ok(match den_web::addr_from_env() {
-        Some(addr) => den_web::reachable(addr),
+    Ok(match play_web::addr_from_env() {
+        Some(addr) => play_web::reachable(addr),
         None => Vec::new(),
     })
 }
 
 #[tauri::command]
 pub(crate) fn launch_game(state: State<'_, AppState>, id: i64) -> CommandResult<LaunchInfo> {
-    with_den(&state, |den| den.launch(id).map_err(|e| e.to_string()))
+    with_play(&state, |play| play.launch(id).map_err(|e| e.to_string()))
 }
 
 #[derive(Serialize)]
@@ -36,9 +36,9 @@ pub(crate) struct StoppedView {
 
 #[tauri::command]
 pub(crate) fn stop_game(state: State<'_, AppState>, id: i64) -> CommandResult<StoppedView> {
-    with_den(&state, |den| {
+    with_play(&state, |play| {
         Ok(StoppedView {
-            stopped: den.stop(id),
+            stopped: play.stop(id),
         })
     })
 }
@@ -49,8 +49,8 @@ pub(crate) fn run_intake(
     folder: String,
     password: Option<String>,
 ) -> CommandResult<Report> {
-    with_den(&state, |den| {
-        den.intake(Path::new(&folder), password)
+    with_play(&state, |play| {
+        play.intake(Path::new(&folder), password)
             .map_err(|e| e.to_string())
     })
 }
@@ -64,11 +64,11 @@ pub(crate) struct ControllerView {
 
 #[tauri::command]
 pub(crate) fn list_controllers(state: State<'_, AppState>) -> CommandResult<ControllerView> {
-    with_den(&state, |den| {
+    with_play(&state, |play| {
         Ok(ControllerView {
-            pads: den.controllers(),
-            keyboard: den.keyboard_scheme(),
-            players: den_core::MAX_PLAYERS,
+            pads: play.controllers(),
+            keyboard: play.keyboard_scheme(),
+            players: play_core::MAX_PLAYERS,
         })
     })
 }
@@ -79,13 +79,13 @@ pub(crate) fn assign_pad(
     identity: String,
     player: Option<usize>,
 ) -> CommandResult<ControllerView> {
-    with_den(&state, |den| {
-        den.assign_pad(&identity, player)
+    with_play(&state, |play| {
+        play.assign_pad(&identity, player)
             .map_err(|e| e.to_string())?;
         Ok(ControllerView {
-            pads: den.controllers(),
-            keyboard: den.keyboard_scheme(),
-            players: den_core::MAX_PLAYERS,
+            pads: play.controllers(),
+            keyboard: play.keyboard_scheme(),
+            players: play_core::MAX_PLAYERS,
         })
     })
 }
@@ -102,17 +102,17 @@ pub(crate) fn choose_retroarch(state: State<'_, AppState>) -> CommandResult<Retr
         .set_title("Choose the RetroArch program")
         .pick_file();
     let Some(picked) = picked else {
-        return with_den(&state, |den| Ok(den.retroarch_status()));
+        return with_play(&state, |play| Ok(play.retroarch_status()));
     };
-    with_den(&state, |den| {
-        den.set_retroarch_path(Some(picked.clone()))
+    with_play(&state, |play| {
+        play.set_retroarch_path(Some(picked.clone()))
             .map_err(|e| e.to_string())
     })
 }
 
 #[tauri::command]
 pub(crate) fn clear_retroarch(state: State<'_, AppState>) -> CommandResult<RetroArchStatus> {
-    with_den(&state, |den| {
-        den.set_retroarch_path(None).map_err(|e| e.to_string())
+    with_play(&state, |play| {
+        play.set_retroarch_path(None).map_err(|e| e.to_string())
     })
 }

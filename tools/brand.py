@@ -41,7 +41,7 @@ MARKS = {
             "fill": True,
         },
     ],
-    "den": [
+    "play": [
         {
             "d": (
                 "M 5 7 H 19 A 2 2 0 0 1 21 9 V 16 "

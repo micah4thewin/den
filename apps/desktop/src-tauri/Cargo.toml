@@ -1,5 +1,5 @@
 [package]
-name = "den-desktop"
+name = "play-desktop"
 description = "The Play desktop shell"
 version = "0.1.0"
 edition = "2021"
@@ -8,7 +8,7 @@ license = "MIT"
 [workspace]
 
 [lib]
-name = "den_desktop_lib"
+name = "play_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -16,8 +16,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-den-core = { path = "../../../crates/den-core" }
-den-web = { path = "../../../crates/den-web" }
+play-core = { path = "../../../crates/play-core" }
+play-web = { path = "../../../crates/play-web" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"

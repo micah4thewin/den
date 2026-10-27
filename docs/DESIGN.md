@@ -1,6 +1,6 @@
 # The design system
 
-This document is byte-identical in the lockbox, hearth, and den
+This document is byte-identical in the lockbox, hearth, and play
 repositories. That is the point of it: these programs are made by the same
 hand, and a shared description is cheaper to keep true than descriptions
 that agree by accident.
@@ -9,7 +9,7 @@ that agree by accident.
 | --- | --- | --- |
 | **lockbox** | ships as **Write** | a tamper-evident record of how a document was written |
 | **hearth** | ships as **Chat** | a local-first assistant that can use your machine |
-| **den** | ships as **Play** | a launcher for the games you already own |
+| **play** | ships as **Play** | a launcher for the games you already own |
 | **lanflix** | ships as **Watch** | a media server for your own network |
 
 Different jobs. One interface. The repositories keep their working names;
@@ -20,7 +20,7 @@ one family: Play on 5555, Watch on 7777, Chat on 8888, Write on 9999.
 Lanflix wears the system on a different stack (React and Tailwind), so
 instead of another copy of this file its repository carries an adaptation
 note, `docs/design.md`, that defers to this document and records only
-where the stack forces a different mechanism. Den carries this document
+where the stack forces a different mechanism. Play carries this document
 and adds its own short adaptation note, `docs/design-notes.md`, for the
 places a launcher differs.
 
@@ -61,7 +61,7 @@ weight or slant, so code stays legible printed in grey.
 
 Lanflix keeps colour in poster art, episode stills and the video itself,
 because those are the things being kept and watched rather than the
-interface. Den keeps it in box art on the shelf for the same reason. Chrome
+interface. Play keeps it in box art on the shelf for the same reason. Chrome
 that floats over artwork — player controls, a hover title, a progress bar
 across a still — is white-on-scrim in both modes: it sits on the content,
 not on the interface.
@@ -72,11 +72,11 @@ Hearth has no such case and therefore has no such exception.
 
 ## 2. Tokens
 
-`tokens.css` in lockbox, hearth, and den, `app/src/index.css` in lanflix,
+`tokens.css` in lockbox, hearth, and play, `app/src/index.css` in lanflix,
 and it is the only stylesheet the application chrome reads that holds a
 colour literal. Standalone pages a program serves or exports carry their
 own embedded copy of the palette, because nothing guarantees them the
-token file — hearth's remote client, den's remote, lockbox's verifier and
+token file — hearth's remote client, play's remote, lockbox's verifier and
 portal — and what they embed is the same greys. (Lockbox's whiteboard palette and its
 print-only recovery sheet are its recorded exceptions; its own notes say
 where and why.) Two layers:
@@ -140,7 +140,7 @@ in CSS so a glyph stays a hairline at any zoom.
 
 - lockbox: `apps/desktop/src/ui/icons.ts`
 - hearth: `src/js/icons.js`
-- den: `apps/desktop/src/ui/icons.ts`
+- play: `apps/desktop/src/ui/icons.ts`
 - lanflix: lucide-react, reweighted once in CSS to the same stroke
 
 A glyph that appears in more than one hand-rolled set is the same glyph,
@@ -164,7 +164,7 @@ markup there should use `data-icon="…"` and this set's own names.
 
 ## 5. The marks
 
-`tools/brand.py`, byte-identical in the lockbox, hearth, and den
+`tools/brand.py`, byte-identical in the lockbox, hearth, and play
 repositories, holds their marks as SVG path data on the same 24×24 grid at
 the same 2.0 stroke, and rasterizes them onto the application icons.
 
@@ -175,7 +175,7 @@ program is:
 | --- | --- | --- |
 | **lockbox** | a box, closed, with a keyhole | a place things are kept |
 | **hearth** | an arch, open, with a fire | a place things are done |
-| **den** | a CRT, with a play triangle | a place games are played |
+| **play** | a CRT, with a play triangle | a place games are played |
 | **lanflix** | a screen, open, with a play triangle | a place things are watched |
 
 The mark on the lock screen is the same path data as the mark in the dock —
@@ -209,7 +209,7 @@ on its own raised tile above the name, and a sunken well to type into. No
 gradient behind the card — a radial wash bands visibly on panels that are
 not perfectly calibrated, and the card's own shadow was already doing that
 job. (In lanflix, which has nothing to lock, the first-run setup screen
-plays this role. In den, which keeps only what is already on the machine,
+plays this role. In play, which keeps only what is already on the machine,
 the library itself is the first surface, and an empty one says so in
 words.)
 

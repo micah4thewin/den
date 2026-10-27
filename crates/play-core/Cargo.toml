@@ -1,0 +1,24 @@
+[package]
+name = "play-core"
+description = "Glue the shell talks to for Play"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+play-ident = { path = "../play-ident" }
+play-intake = { path = "../play-intake" }
+play-db = { path = "../play-db" }
+play-runner = { path = "../play-runner" }
+play-input = { path = "../play-input" }
+serde.workspace = true
+thiserror.workspace = true
+dirs.workspace = true
+rusqlite.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
