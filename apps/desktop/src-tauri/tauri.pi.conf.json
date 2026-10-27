@@ -1,0 +1,11 @@
+{
+  "bundle": {
+    "linux": {
+      "deb": {
+        "depends": [
+          "retroarch"
+        ]
+      }
+    }
+  }
+}

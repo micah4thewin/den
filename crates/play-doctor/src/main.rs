@@ -150,14 +150,13 @@ fn report_cores(play: &Play, retroarch: &Path) {
         None => println!("  none found — Play cannot read where your cores are"),
     }
 
-    let Some(dir) = play.runner().cores_for(retroarch) else {
-        println!("\nCores");
-        println!("  No cores directory found. Play will pass RetroArch the core");
-        println!("  file name and let it resolve one; if that fails, RetroArch");
-        println!("  says `Fatal error received in: \"init_libretro_symbols()\"`.");
-        return;
-    };
-    println!("\nCores  ({})", dir.display());
+    println!(
+        "\nCores  (Play's own: {})",
+        play.runner().managed_cores_dir().display()
+    );
+    if let Some(dir) = play.runner().cores_for(retroarch) {
+        println!("       (RetroArch's: {})", dir.display());
+    }
     let systems = [
         System::Nes,
         System::Snes,
@@ -171,23 +170,24 @@ fn report_cores(play: &Play, retroarch: &Path) {
     ];
     let mut missing = Vec::new();
     for system in systems {
-        let core = system.default_core();
-        let file = play_runner::core_file_name(core);
-        if dir.join(&file).is_file() {
-            println!("  present       {:<14} {file}", system.name());
-        } else {
-            missing.push((system.name(), file));
+        let found = system
+            .cores()
+            .iter()
+            .find_map(|core| play.runner().find_core(core));
+        match found {
+            Some(path) => println!("  present       {:<14} {}", system.name(), path.display()),
+            None => missing.push((system.name(), system.cores().join(" or "))),
         }
     }
-    for (name, file) in &missing {
-        println!("  MISSING       {name:<14} {file}");
+    for (name, cores) in &missing {
+        println!("  MISSING       {name:<14} {cores}");
     }
     if !missing.is_empty() {
         println!(
-            "\n  A missing core is not a Play problem: RetroArch downloads cores itself,\n\
-             under Main Menu → Online Updater → Core Downloader. Play refuses to\n\
-             launch a game whose core is not there, rather than letting RetroArch\n\
-             die with `init_libretro_symbols()`."
+            "\n  The desktop app downloads a missing core on first launch, after an\n\
+             intake, or when a game needs it. Play refuses to launch a game whose\n\
+             core is not there, rather than letting RetroArch die with\n\
+             `init_libretro_symbols()`."
         );
     }
 }

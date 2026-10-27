@@ -1,5 +1,5 @@
 use crate::{with_play, AppState, CommandResult};
-use play_core::{ControllerInfo, KeyBinding, LaunchInfo, Report, RetroArchStatus};
+use play_core::{ControllerInfo, KeyBinding, LaunchInfo, Report, RetroArchStatus, SetupStatus};
 use play_web::views::{game_view, library_view, GameView, LibraryView};
 use play_web::Reachable;
 use serde::Serialize;
@@ -24,7 +24,9 @@ pub(crate) fn web_remote_urls() -> CommandResult<Vec<Reachable>> {
     })
 }
 
-#[tauri::command]
+// Off the main thread: a launch may download the game's core first, and the
+// window should not freeze while it does.
+#[tauri::command(async)]
 pub(crate) fn launch_game(state: State<'_, AppState>, id: i64) -> CommandResult<LaunchInfo> {
     with_play(&state, |play| play.launch(id).map_err(|e| e.to_string()))
 }
@@ -50,9 +52,17 @@ pub(crate) fn run_intake(
     password: Option<String>,
 ) -> CommandResult<Report> {
     with_play(&state, |play| {
-        play.intake(Path::new(&folder), password)
-            .map_err(|e| e.to_string())
+        let report = play
+            .intake(Path::new(&folder), password)
+            .map_err(|e| e.to_string())?;
+        play.fetch_missing_cores();
+        Ok(report)
     })
+}
+
+#[tauri::command]
+pub(crate) fn setup_status(state: State<'_, AppState>) -> CommandResult<SetupStatus> {
+    with_play(&state, |play| Ok(play.setup_status()))
 }
 
 #[derive(Serialize)]

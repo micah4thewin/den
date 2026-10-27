@@ -83,6 +83,25 @@ fn config_path(raw: &str, retroarch: &Path) -> Option<PathBuf> {
 }
 
 pub(crate) fn core_dir(retroarch: &Path) -> Option<PathBuf> {
+    core_dir_candidates(retroarch)
+        .into_iter()
+        .find(|d| d.is_dir() && holds_a_core(d))
+}
+
+/// Every directory that holds cores, in the order `core_dir` would choose
+/// between them. A distribution's RetroArch keeps its packaged cores in one
+/// place and a downloaded core lands in another, so a single directory is not
+/// enough to find a particular core.
+pub(crate) fn core_dirs(retroarch: &Path) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = core_dir_candidates(retroarch)
+        .into_iter()
+        .filter(|d| d.is_dir() && holds_a_core(d))
+        .collect();
+    dedup_keeping_order(&mut out);
+    out
+}
+
+fn core_dir_candidates(retroarch: &Path) -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
     if let Some(config) = user_config(retroarch) {
@@ -105,14 +124,14 @@ pub(crate) fn core_dir(retroarch: &Path) -> Option<PathBuf> {
     candidates.push(PathBuf::from("/usr/lib/libretro"));
     candidates.push(PathBuf::from("/usr/local/lib/libretro"));
     candidates.push(PathBuf::from("/usr/lib/x86_64-linux-gnu/libretro"));
+    candidates.push(PathBuf::from("/usr/lib/aarch64-linux-gnu/libretro"));
+    candidates.push(PathBuf::from("/usr/lib/arm-linux-gnueabihf/libretro"));
 
     if let Some(parent) = retroarch.parent() {
         candidates.push(parent.to_path_buf());
     }
 
     candidates
-        .into_iter()
-        .find(|d| d.is_dir() && holds_a_core(d))
 }
 
 fn holds_a_core(dir: &Path) -> bool {
@@ -208,6 +227,8 @@ fn is_executable(_path: &Path) -> bool {
 pub(crate) fn binary_names() -> &'static [&'static str] {
     if cfg!(target_os = "windows") {
         &["retroarch.exe", "retroarch"]
+    } else if cfg!(target_os = "macos") {
+        &["retroarch", "org.libretro.RetroArch", "RetroArch.app"]
     } else {
         &["retroarch", "org.libretro.RetroArch"]
     }

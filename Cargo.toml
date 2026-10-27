@@ -9,6 +9,7 @@ members = [
   "crates/play-core",
   "crates/play-web",
   "crates/play-doctor",
+  "crates/play-setup",
 ]
 
 [workspace.package]
@@ -32,6 +33,8 @@ crc32fast = "1"
 zip = { version = "2", default-features = false, features = ["deflate", "aes-crypto"] }
 sevenz-rust = { version = "0.6", default-features = false }
 tar = "0.4"
+
+ureq = { version = "2", default-features = false, features = ["tls"] }
 flate2 = "1"
 
 rusqlite = { version = "0.32", features = ["bundled"] }

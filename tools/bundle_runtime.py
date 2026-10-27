@@ -23,6 +23,7 @@ CORE_LICENCES = {
     "genesis_plus_gx": "Genesis Plus GX (non-commercial)",
     "picodrive": "MAME-like (non-commercial)",
     "mupen64plus_next": "GPLv3",
+    "pcsx_rearmed": "GPLv2",
     "swanstation": "GPLv3",
     "gambatte": "GPLv2",
     "mgba": "MPL-2.0",
@@ -140,6 +141,8 @@ def find_core_dir(retroarch):
         "/usr/lib/libretro",
         "/usr/local/lib/libretro",
         "/usr/lib/x86_64-linux-gnu/libretro",
+        "/usr/lib/aarch64-linux-gnu/libretro",
+        "/usr/lib/arm-linux-gnueabihf/libretro",
         parent,
     ]
     for candidate in candidates:

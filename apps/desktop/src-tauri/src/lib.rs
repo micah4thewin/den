@@ -43,6 +43,9 @@ pub fn run() {
                 Ok(dir) => play.set_runtime_dir(Some(dir)),
                 Err(e) => log::warn!("no resource directory: {e}"),
             }
+            // A fresh machine has no emulator and no cores: fetch them now,
+            // in the background, so the first game is ready when it arrives.
+            play.start_setup();
             let shared: play_web::SharedPlay = Arc::new(Mutex::new(play));
             if let Some(addr) = play_web::addr_from_env() {
                 let for_server = shared.clone();
@@ -62,6 +65,7 @@ pub fn run() {
             commands::launch_game,
             commands::stop_game,
             commands::run_intake,
+            commands::setup_status,
             commands::list_controllers,
             commands::choose_folder,
             commands::choose_retroarch,

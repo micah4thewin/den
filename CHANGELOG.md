@@ -48,6 +48,24 @@ the build plan's milestones, not semver.
   no `Origin` at all is somebody at a keyboard, and goes through.
 
 ### Added
+- **Play sets itself up.** On first launch it downloads a RetroArch if none
+  can be found and the cores for the common systems (NES, SNES, Genesis, Game
+  Boy, GBA, N64, PlayStation, arcade), in the background, with progress on the
+  Library screen. An intake fetches the cores for whatever it shelved, and a
+  game whose core is still missing downloads it when you press Play instead of
+  sending you to RetroArch's Core Downloader. Everything comes from libretro's
+  buildbot and lands in the library's `_runtime/`; nothing is installed
+  system-wide. New crate: `play-setup`.
+- **Each system has a list of cores, best first.** Play launches with the
+  first one installed anywhere — its own downloads, RetroArch's directory, or
+  a distribution's packages — so a Raspberry Pi can play on the cores apt
+  gives it. PlayStation now leads with `pcsx_rearmed`, which needs no BIOS.
+- **Installers for every machine, built by CI.** `release.yml` builds the
+  Windows `.exe`/`.msi`, a universal macOS `.dmg`, a Linux `.deb` and AppImage,
+  and an arm64 `.deb` for 64-bit Raspberry Pi OS. The Linux packages ask apt
+  for RetroArch and its packaged cores (the Pi's requires RetroArch, since
+  libretro publishes none for ARM Linux), and the Windows installer carries
+  the WebView2 bootstrapper.
 - **The remote can stop what it started.** `/api/status` names what is
   playing and for how long, `/api/stop/{id}` and `/api/stop` end it, and the
   page carries a sticky bar with the game and one **Stop** beside it. Stopping

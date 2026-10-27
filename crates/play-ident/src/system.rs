@@ -87,22 +87,47 @@ impl System {
         System::ALL.into_iter().find(|system| system.name() == name)
     }
 
+    /// The core Play reaches for first.
     pub fn default_core(self) -> &'static str {
+        self.cores()[0]
+    }
+
+    /// Every core that runs this system, best first. Play launches with the
+    /// first one present and downloads the first one it can get, so the later
+    /// entries are the ones a distribution packages or a smaller machine
+    /// (a Raspberry Pi) has builds of when the first does not.
+    ///
+    /// PlayStation leads with `pcsx_rearmed` because it boots without a BIOS
+    /// file; a fresh machine has none, and Play does not ship any.
+    pub fn cores(self) -> &'static [&'static str] {
         match self {
-            System::Nes => "mesen",
-            System::Snes => "snes9x",
-            System::Genesis | System::SegaCd => "genesis_plus_gx",
-            System::Sega32x => "picodrive",
-            System::N64 => "mupen64plus_next",
-            System::Ps1 => "swanstation",
-            System::Gb | System::Gbc => "gambatte",
-            System::Gba => "mgba",
-            System::Arcade => "fbneo",
-            System::Dos => "dosbox_pure",
-            System::Ps2 => "pcsx2",
-            System::Gamecube | System::Wii => "dolphin",
+            System::Nes => &["mesen", "nestopia", "fceumm"],
+            System::Snes => &["snes9x", "snes9x2010"],
+            System::Genesis | System::SegaCd => &["genesis_plus_gx", "picodrive"],
+            System::Sega32x => &["picodrive"],
+            System::N64 => &["mupen64plus_next", "parallel_n64"],
+            System::Ps1 => &["pcsx_rearmed", "swanstation", "mednafen_psx"],
+            System::Gb | System::Gbc => &["gambatte", "mgba", "sameboy"],
+            System::Gba => &["mgba", "vba_next", "gpsp"],
+            System::Arcade => &["fbneo", "mame2003_plus"],
+            System::Dos => &["dosbox_pure"],
+            System::Ps2 => &["pcsx2"],
+            System::Gamecube | System::Wii => &["dolphin"],
         }
     }
+
+    /// The systems a fresh install gets ready before anything is shelved:
+    /// the ones most downloads turn out to be.
+    pub const COMMON: [System; 8] = [
+        System::Nes,
+        System::Snes,
+        System::Genesis,
+        System::Gb,
+        System::Gba,
+        System::N64,
+        System::Ps1,
+        System::Arcade,
+    ];
 }
 
 #[cfg(test)]
@@ -115,5 +140,17 @@ mod tests {
             assert_eq!(System::from_name(system.name()), Some(system));
         }
         assert_eq!(System::from_name("Atari"), None);
+    }
+
+    #[test]
+    fn every_system_has_a_core_and_none_repeats() {
+        for system in System::ALL {
+            let cores = system.cores();
+            assert!(!cores.is_empty(), "{system:?}");
+            assert_eq!(system.default_core(), cores[0]);
+            let mut seen = cores.to_vec();
+            seen.dedup();
+            assert_eq!(seen.len(), cores.len(), "{system:?}");
+        }
     }
 }

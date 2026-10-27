@@ -5,10 +5,13 @@ pub use play_input::ControllerInfo;
 use play_intake::IntakeOptions;
 pub use play_intake::Report;
 use play_runner::{PlayerBinding, Runner, Running};
+pub use play_setup::SetupStatus;
+use play_setup::{Need, Setup};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -121,6 +124,10 @@ pub struct Play {
     db: Db,
     dat: Index,
     runner: Runner,
+    setup: Arc<Setup>,
+    /// Whether a launch may download a missing core. Off until the shell asks
+    /// for setup, so a library opened by a tool or a test never reaches out.
+    downloads: AtomicBool,
     input: play_input::Input,
     live: Mutex<Vec<Live>>,
 }
@@ -135,11 +142,14 @@ impl Play {
             runner.set_chosen(Some(PathBuf::from(chosen)));
         }
         let input = play_input::Input::new();
+        let setup = Arc::new(Setup::new(runner.managed_dir()));
         Ok(Play {
             library: library.to_path_buf(),
             db,
             dat,
             runner,
+            setup,
+            downloads: AtomicBool::new(false),
             input,
             live: Mutex::new(Vec::new()),
         })
@@ -184,6 +194,101 @@ impl Play {
         Ok(play_intake::run_intake(drop, &opts)?)
     }
 
+    /// Get this machine ready to play, in the background: a RetroArch if none
+    /// can be found, and a core for each common system and each system on the
+    /// shelf that has none. Returns at once; [`Play::setup_status`] says how
+    /// it is going.
+    pub fn start_setup(&self) {
+        self.downloads.store(true, Ordering::Relaxed);
+        let retroarch = self.runner.locate().is_err()
+            && self.runner.chosen().is_none()
+            && std::env::var_os("RETROARCH").is_none();
+        let mut systems: Vec<System> = System::COMMON.to_vec();
+        systems.extend(self.shelved_systems());
+        self.fetch_cores_for(retroarch, systems);
+    }
+
+    /// Fetch, in the background, a core for each system on the shelf that
+    /// has none — what a new intake calls once its games are shelved.
+    pub fn fetch_missing_cores(&self) {
+        if !self.downloads.load(Ordering::Relaxed) {
+            return;
+        }
+        self.fetch_cores_for(false, self.shelved_systems());
+    }
+
+    pub fn setup_status(&self) -> SetupStatus {
+        self.setup.status()
+    }
+
+    fn shelved_systems(&self) -> Vec<System> {
+        self.db
+            .list_systems()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(name, _)| System::from_name(&name))
+            .collect()
+    }
+
+    fn fetch_cores_for(&self, retroarch: bool, systems: Vec<System>) {
+        let mut needs: Vec<Need> = Vec::new();
+        let mut ready: Vec<String> = Vec::new();
+        for system in systems {
+            if external_only(system.name()).is_some() {
+                continue;
+            }
+            // GB and GBC share their cores; one need covers both.
+            if needs.iter().any(|n| n.cores[0] == system.default_core()) {
+                continue;
+            }
+            if self.installed_core(system.cores()).is_some() {
+                ready.push(system.name().to_string());
+                continue;
+            }
+            needs.push(Need {
+                system: system.name().to_string(),
+                cores: system.cores().iter().map(|c| c.to_string()).collect(),
+            });
+        }
+        self.setup.already_ready(ready);
+        self.setup.prepare(retroarch, needs);
+    }
+
+    /// The first of `cores` that is installed anywhere RetroArch can load it.
+    fn installed_core<S: AsRef<str>>(&self, cores: &[S]) -> Option<String> {
+        cores
+            .iter()
+            .map(|c| c.as_ref())
+            .find(|c| self.runner.find_core(c).is_some())
+            .map(|c| c.to_string())
+    }
+
+    /// The core to launch `game` with: the first of its system's cores that is
+    /// installed, downloading one on the spot if none is.
+    fn ready_core(&self, game: &Game) -> String {
+        let cores = cores_for(game);
+        if let Some(core) = self.installed_core(&cores) {
+            return core;
+        }
+        if cores[0].is_empty()
+            || !self.downloads.load(Ordering::Relaxed)
+            || self.runner.locate().is_err()
+        {
+            return cores[0].clone();
+        }
+        let need = Need {
+            system: game.system.clone(),
+            cores: cores.clone(),
+        };
+        match self.setup.get_core(&need) {
+            Ok(core) => core,
+            Err(e) => {
+                eprintln!("play: could not download a core for {}: {e}", game.system);
+                cores[0].clone()
+            }
+        }
+    }
+
     pub fn launch(&self, game_id: i64) -> Result<LaunchInfo, Error> {
         let game = self.db.get_game(game_id)?.ok_or(Error::NotFound)?;
         let system = System::from_name(&game.system);
@@ -193,7 +298,19 @@ impl Play {
         ) {
             return Err(Error::External(game.system.clone()));
         }
-        let core = core_for(&game);
+        if self.runner.locate().is_err() {
+            let status = self.setup.status();
+            if status.working {
+                return Err(Error::Unusable(format!(
+                    "Play is still getting ready{}. Try again in a minute.",
+                    status
+                        .doing
+                        .map(|d| format!(" ({})", d.to_lowercase()))
+                        .unwrap_or_default()
+                )));
+            }
+        }
+        let core = self.ready_core(&game);
         // One game, one process: a second copy would share this game's config
         // file and its save RAM with the first, and the loser of that race
         // takes the session with it. A double-tap on the remote is the usual
@@ -441,7 +558,10 @@ impl Play {
     }
 
     pub fn core_status(&self, game: &Game) -> CoreStatus {
-        let name = core_for(game);
+        let cores = cores_for(game);
+        let name = self
+            .installed_core(&cores)
+            .unwrap_or_else(|| cores[0].clone());
         if let Some(reason) = external_only(&game.system) {
             return CoreStatus {
                 name,
@@ -524,12 +644,16 @@ fn external_only(system: &str) -> Option<String> {
     }
 }
 
-fn core_for(game: &Game) -> String {
-    game.core.clone().unwrap_or_else(|| {
-        System::from_name(&game.system)
-            .map(|s| s.default_core().to_string())
-            .unwrap_or_default()
-    })
+/// The cores that can run `game`, best first: the one it was set to if any,
+/// otherwise its system's. Never empty; an unknown system gets one empty name,
+/// which nothing will find.
+fn cores_for(game: &Game) -> Vec<String> {
+    if let Some(core) = &game.core {
+        return vec![core.clone()];
+    }
+    System::from_name(&game.system)
+        .map(|s| s.cores().iter().map(|c| c.to_string()).collect())
+        .unwrap_or_else(|| vec![String::new()])
 }
 
 fn pad_key(identity: &str) -> String {

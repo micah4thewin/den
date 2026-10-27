@@ -37,6 +37,14 @@ export interface RetroArchStatus {
   runtime_dir: string;
 }
 
+/** How far Play has got with downloading what this machine needs. */
+export interface SetupStatus {
+  working: boolean;
+  doing: string | null;
+  ready: string[];
+  problems: string[];
+}
+
 export interface LibraryView {
   path: string;
   games: Game[];

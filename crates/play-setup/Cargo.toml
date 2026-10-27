@@ -1,0 +1,20 @@
+[package]
+name = "play-setup"
+description = "Gets a fresh machine ready: downloads RetroArch and the cores the shelf needs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+zip.workspace = true
+sevenz-rust.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

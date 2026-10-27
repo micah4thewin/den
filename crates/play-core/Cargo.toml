@@ -12,6 +12,7 @@ play-intake = { path = "../play-intake" }
 play-db = { path = "../play-db" }
 play-runner = { path = "../play-runner" }
 play-input = { path = "../play-input" }
+play-setup = { path = "../play-setup" }
 serde.workspace = true
 thiserror.workspace = true
 dirs.workspace = true
