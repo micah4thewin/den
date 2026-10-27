@@ -8,8 +8,8 @@ pub use process::Running;
 
 use config::write_config;
 use locate::{
-    binary_names, candidates, core_argument, core_dir, explicit_override, runnable, runtime_dirs,
-    why_not,
+    binary_names, candidates, core_argument, core_dir, core_dirs, explicit_override, runnable,
+    runtime_dirs, why_not,
 };
 use play_db::Game;
 use std::fs;
@@ -29,7 +29,8 @@ pub enum RunnerError {
     #[error("the chosen RetroArch, `{0}`, {1}")]
     ChosenNotRunnable(String, &'static str),
     #[error(
-        "the `{core}` core is not installed. RetroArch downloads cores itself: \
+        "the `{core}` core is not installed, and Play could not download it — \
+         check the machine is online and try again. RetroArch can also fetch it: \
          open it, then Main Menu -> Online Updater -> Core Downloader, and get \
          `{core}`. Play looked in {dir}"
     )]
@@ -98,6 +99,31 @@ impl Runner {
 
     pub fn managed_dir(&self) -> &Path {
         &self.managed_dir
+    }
+
+    /// Where the cores Play downloads for itself go. Searched before any
+    /// other cores directory, whichever RetroArch is in use.
+    pub fn managed_cores_dir(&self) -> PathBuf {
+        self.managed_dir.join("cores")
+    }
+
+    /// Every directory a core could be loaded from for this RetroArch, the
+    /// ones Play downloaded into first.
+    fn core_dirs_for(&self, retroarch: &Path) -> Vec<PathBuf> {
+        let mut dirs = vec![self.managed_cores_dir()];
+        dirs.extend(core_dirs(retroarch));
+        dirs.dedup();
+        dirs
+    }
+
+    /// The file for `core`, wherever it is installed.
+    pub fn find_core(&self, core: &str) -> Option<PathBuf> {
+        let retroarch = self.locate().ok()?;
+        let file = core_file_name(core);
+        self.core_dirs_for(&retroarch.path)
+            .into_iter()
+            .map(|d| d.join(&file))
+            .find(|p| p.is_file())
     }
 
     pub fn set_bundled_dir(&self, dir: Option<PathBuf>) {
@@ -176,8 +202,12 @@ impl Runner {
 
     pub fn core_installed(&self, core: &str) -> Option<bool> {
         let retroarch = self.locate().ok()?;
-        let dir = core_dir(&retroarch.path)?;
-        Some(dir.join(core_file_name(core)).is_file())
+        let file = core_file_name(core);
+        let dirs = self.core_dirs_for(&retroarch.path);
+        if !dirs.iter().any(|d| d.is_dir()) {
+            return None;
+        }
+        Some(dirs.iter().any(|d| d.join(&file).is_file()))
     }
 
     pub fn launch(
@@ -191,17 +221,23 @@ impl Runner {
         fs::create_dir_all(&self.save_dir)?;
         fs::create_dir_all(&self.state_dir)?;
 
-        let cores = core_dir(&retroarch);
-
-        if let Some(dir) = cores.as_deref() {
-            let file = core_file_name(core);
-            if !dir.join(&file).is_file() {
+        let file = core_file_name(core);
+        let dirs: Vec<PathBuf> = self
+            .core_dirs_for(&retroarch)
+            .into_iter()
+            .filter(|d| d.is_dir())
+            .collect();
+        let cores = match dirs.iter().find(|d| d.join(&file).is_file()) {
+            Some(dir) => Some(dir.clone()),
+            None if !dirs.is_empty() => {
+                let looked: Vec<String> = dirs.iter().map(|d| d.display().to_string()).collect();
                 return Err(RunnerError::CoreMissing {
                     core: core.to_string(),
-                    dir: dir.display().to_string(),
+                    dir: looked.join(", "),
                 });
             }
-        }
+            None => core_dir(&retroarch),
+        };
 
         let config_path = self.config_dir.join(format!("play-{}.cfg", game.id));
         write_config(

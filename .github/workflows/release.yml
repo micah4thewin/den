@@ -1,0 +1,87 @@
+name: Installers
+
+# Builds the one-click installers: a .deb and an AppImage for Linux PCs, a
+# .deb for the Raspberry Pi (64-bit Raspberry Pi OS), an .exe and an .msi for
+# Windows, and a .dmg for Macs. A tag `v*` attaches them to a draft release;
+# running it by hand leaves them as workflow artifacts.
+#
+# No emulator is bundled. Play downloads RetroArch and the cores it needs from
+# libretro on first launch (crates/play-setup), and the Linux packages ask apt
+# for the distribution's RetroArch as well.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux (x86_64)
+            os: ubuntu-22.04
+            args: --bundles deb,appimage
+          - name: Raspberry Pi (arm64)
+            os: ubuntu-22.04-arm
+            args: --bundles deb --config src-tauri/tauri.pi.conf.json
+          - name: Windows
+            os: windows-latest
+            args: --bundles nsis,msi
+          - name: macOS (universal)
+            os: macos-latest
+            args: --target universal-apple-darwin --bundles dmg
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - name: System libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libfuse2 patchelf file
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - run: npm ci
+        working-directory: apps/desktop
+      - name: Build
+        run: npx tauri build ${{ matrix.args }}
+        working-directory: apps/desktop
+      - name: Collect
+        shell: bash
+        run: |
+          mkdir -p out
+          find apps/desktop/src-tauri/target -path '*/release/bundle/*' -type f \
+            \( -name '*.deb' -o -name '*.AppImage' -o -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \) \
+            -exec cp {} out/ \;
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: out/*

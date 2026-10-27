@@ -1,15 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { $, el, toast } from "./dom";
 import { openGame } from "./game";
-import type { Game, LibraryView, RetroArchStatus } from "./types";
+import type { Game, LibraryView, RetroArchStatus, SetupStatus } from "./types";
 
 export async function renderLibrary(): Promise<void> {
-  const data = await invoke<LibraryView>("get_library");
+  const [data, setup] = await Promise.all([
+    invoke<LibraryView>("get_library"),
+    invoke<SetupStatus>("setup_status"),
+  ]);
   $<HTMLElement>("library-path").textContent = data.path;
   $<HTMLElement>("game-count").textContent =
     data.games.length === 1 ? "1 game" : `${data.games.length} games`;
 
-  renderRetroArchNotice(data.retroarch);
+  renderRetroArchNotice(data.retroarch, setup);
+  watchSetup(setup);
 
   const continueBand = $<HTMLElement>("continue-band");
   const continueShelf = $<HTMLElement>("continue-shelf");
@@ -36,6 +40,48 @@ export async function renderLibrary(): Promise<void> {
 }
 
 let whereOpen = false;
+let setupTimer: number | undefined;
+
+/** While Play is downloading, look again every couple of seconds, and redraw
+ * the shelf once when it finishes so the notice goes away by itself. */
+function watchSetup(setup: SetupStatus): void {
+  window.clearTimeout(setupTimer);
+  if (!setup.working) return;
+  setupTimer = window.setTimeout(() => {
+    void (async () => {
+      const next = await invoke<SetupStatus>("setup_status");
+      if (next.working) {
+        const retroarch = (await invoke<LibraryView>("get_library")).retroarch;
+        renderRetroArchNotice(retroarch, next);
+        watchSetup(next);
+      } else {
+        await renderLibrary();
+      }
+    })();
+  }, 2000);
+}
+
+function renderSetup(notice: HTMLElement, setup: SetupStatus): void {
+  if (setup.working) {
+    notice.appendChild(
+      el("p", "notice-word", "Getting Play ready to play on this machine. This happens once."),
+    );
+    if (setup.doing) notice.appendChild(el("p", "quiet", `${setup.doing}…`));
+    if (setup.ready.length > 0) {
+      notice.appendChild(el("p", "quiet", `Ready: ${setup.ready.join(", ")}`));
+    }
+  }
+  if (setup.problems.length > 0) {
+    const details = el("details", "notice-where") as HTMLDetailsElement;
+    details.appendChild(
+      el("summary", undefined, setup.problems.length === 1 ? "1 download failed" : `${setup.problems.length} downloads failed`),
+    );
+    const list = el("ul", "extra-list mono");
+    for (const problem of setup.problems) list.appendChild(el("li", undefined, problem));
+    details.appendChild(list);
+    notice.appendChild(details);
+  }
+}
 
 function searchAgainButton(): HTMLButtonElement {
   const clear = el("button", "ghost", "Use the automatic search again");
@@ -44,13 +90,19 @@ function searchAgainButton(): HTMLButtonElement {
   return clear;
 }
 
-function renderRetroArchNotice(status: RetroArchStatus): void {
+function renderRetroArchNotice(status: RetroArchStatus, setup: SetupStatus): void {
   const notice = $<HTMLElement>("retroarch-notice");
   const hadFocus = notice.contains(document.activeElement)
     ? (document.activeElement as HTMLElement).textContent
     : null;
   notice.replaceChildren();
-  notice.hidden = status.available && !status.chosen;
+  const quietSetup = !setup.working && setup.problems.length === 0;
+  notice.hidden = status.available && !status.chosen && quietSetup;
+
+  renderSetup(notice, setup);
+  // Still downloading RetroArch: the setup lines say so, and asking the
+  // person to find one by hand would be asking them to do Play's job.
+  if (!status.available && setup.working) return;
 
   if (status.available) {
     if (!status.chosen) return;

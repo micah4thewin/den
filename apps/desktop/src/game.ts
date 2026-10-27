@@ -2,12 +2,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { $, el, showScreen, toast } from "./dom";
 import { pickRetroArch } from "./library";
 import { icon } from "./ui/icons";
-import type { GameView, Stopped } from "./types";
+import type { GameView, SetupStatus, Stopped } from "./types";
 
 export async function openGame(id: number): Promise<void> {
   try {
-    const view = await invoke<GameView>("get_game", { id });
-    renderGame(view);
+    const [view, setup] = await Promise.all([
+      invoke<GameView>("get_game", { id }),
+      invoke<SetupStatus>("setup_status"),
+    ]);
+    renderGame(view, setup);
     showScreen("game");
   } catch (error) {
     toast(String(error));
@@ -16,26 +19,22 @@ export async function openGame(id: number): Promise<void> {
 
 function playBlockedBecause(
   view: GameView,
+  setup: SetupStatus,
 ): { reason: string; choose: boolean } | null {
   if (view.core.unsupported) {
     return { reason: view.core.unsupported, choose: false };
   }
   if (!view.retroarch.available) {
+    if (setup.working) {
+      return { reason: `Play is still getting ready: ${setup.doing ?? "downloading"}.`, choose: false };
+    }
     return { reason: "RetroArch was not found.", choose: true };
   }
-  if (view.core.installed === false) {
-    const named = view.core.name || "the";
-    return {
-      reason:
-        `RetroArch has no ${named} core yet. Open RetroArch, then ` +
-        `Main Menu → Online Updater → Core Downloader.`,
-      choose: false,
-    };
-  }
+  // A missing core is not a block: Play downloads it on the way in.
   return null;
 }
 
-function renderGame(view: GameView): void {
+function renderGame(view: GameView, setup: SetupStatus): void {
   const layout = $<HTMLElement>("game-layout");
   layout.replaceChildren();
 
@@ -50,17 +49,20 @@ function renderGame(view: GameView): void {
   const play = el("button", "primary", view.playing ? "Playing" : "Play");
   const playIcon = icon("play");
   if (playIcon) play.prepend(playIcon);
-  const blocked = playBlockedBecause(view);
+  const blocked = playBlockedBecause(view, setup);
   // One game, one process: while it is playing there is a Stop, not a Play.
   play.disabled = blocked !== null || view.playing;
   play.addEventListener("click", () => {
     void (async () => {
+      play.disabled = true;
+      if (view.core.installed === false) play.lastChild!.textContent = "Getting ready…";
       try {
         const info = await invoke<{ pid: number; core: string }>("launch_game", { id: view.game.id });
         toast(`Launched with ${info.core}`);
         await openGame(view.game.id);
       } catch (error) {
         toast(String(error));
+        await openGame(view.game.id);
       }
     })();
   });
@@ -81,6 +83,11 @@ function renderGame(view: GameView): void {
       })();
     });
     playRow.appendChild(stop);
+  }
+  if (!blocked && view.core.installed === false && !view.playing) {
+    playRow.appendChild(
+      el("span", "quiet play-note", `The ${view.core.name} core downloads the first time you play.`),
+    );
   }
   if (blocked) {
     const note = el("span", "quiet play-note", blocked.reason);

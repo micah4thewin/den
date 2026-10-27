@@ -30,7 +30,9 @@
       "deb",
       "appimage",
       "nsis",
-      "msi"
+      "msi",
+      "app",
+      "dmg"
     ],
     "category": "Game",
     "shortDescription": "A quiet place to play the games you already own",
@@ -46,10 +48,26 @@
     "windows": {
       "nsis": {
         "installMode": "perMachine"
+      },
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
       }
     },
     "resources": {
       "resources/runtime": "runtime"
+    },
+    "linux": {
+      "deb": {
+        "recommends": [
+          "retroarch",
+          "libretro-nestopia",
+          "libretro-snes9x",
+          "libretro-genesisplusgx",
+          "libretro-gambatte",
+          "libretro-mgba",
+          "libretro-beetle-psx"
+        ]
+      }
     }
   }
 }
