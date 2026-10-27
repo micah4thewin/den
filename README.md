@@ -185,10 +185,28 @@ plugged into the TV. What is playing sits at the top of the page with a
 Stopping asks RetroArch to quit rather than killing it, the same shutdown
 <kbd>Esc</kbd> gives, so the save is written on the way out.
 
-**The phone is the remote, not the screen.** The game runs on the machine the
-library lives on and comes out of that machine's television. Play does not
-stream video, and the page cannot press buttons — a controller or the keyboard
-does that, at the machine.
+### Playing on the phone itself
+
+Every game sheet has two buttons. **Play on the machine** starts it on the
+computer and its television, with the phone as the remote. **Play on this
+phone** runs the game in the phone's own browser, on its own screen, with
+touch controls — GoldenEye on the bus, from the shelf at home.
+
+Nothing is installed on the phone and nothing is set up on the machine. The
+phone's emulator is [EmulatorJS](https://emulatorjs.org) — RetroArch's
+libretro cores built for WebAssembly — and Play serves it from the machine:
+the first time a phone asks, Play downloads the loader (about 2 MB) and the
+core for that system (1.5 MB for N64) from the npm registry, checks each
+against a SHA-512 pinned in `crates/play-web/src/emulator.rs`, and keeps it in
+`emulator/` beside the library. After that the phone only ever talks to the
+machine, so it works over the tailnet with the machine's internet off.
+
+What plays on the phone: NES, SNES, Genesis, 32X, N64, PlayStation (one-file
+`.chd`, `.pbp` or `.iso`), Game Boy, Game Boy Color, Game Boy Advance and
+arcade. Sega CD needs its BIOS and DOS needs a keyboard, so those stay on the
+machine; a disc that is several files (`.cue` + `.bin`, `.m3u`) says so on
+its sheet. Saves made on the phone stay in that phone's browser — they do not
+travel to the machine's RetroArch, or back.
 
 The Library screen lists every address the remote answers on, each said with
 where it works, and the same lines go to the log at startup.

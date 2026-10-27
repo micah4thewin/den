@@ -10,6 +10,16 @@ the build plan's milestones, not semver.
 - Building the Tauri v2 desktop shell (M0 scaffold) over the already-built
   core workspace.
 
+### Added
+- **Play on this phone.** The remote could only start a game on the machine,
+  so tapping GoldenEye on a phone put it on the television and nothing on the
+  phone. Every game sheet now also offers to run the game in the phone's own
+  browser, with touch controls, through EmulatorJS. The machine downloads the
+  loader and each system's core from the npm registry the first time a phone
+  needs it, checks each against a pinned SHA-512, keeps it beside the library,
+  and serves it — nothing to install on either end. The game file comes from
+  the shelf at `/api/rom/{id}/…`, with byte ranges.
+
 ### Changed
 - **Play finds the address it has on your tailnet**, and says where each
   address works rather than assuming one network. The route probes now include

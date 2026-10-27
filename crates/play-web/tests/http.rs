@@ -244,3 +244,73 @@ async fn a_name_pointed_at_this_machine_from_outside_is_refused() {
         assert_eq!(ok.status, StatusCode::OK, "{host} was turned away");
     }
 }
+
+fn shelve(play: &SharedPlay, title: &str, system: &str, file: &std::path::Path) -> i64 {
+    let play = play.lock().unwrap();
+    play.db()
+        .add_game(title, system, file, None, None, "added")
+        .expect("add game")
+}
+
+#[tokio::test]
+async fn an_n64_game_plays_on_the_phone_from_the_shelf() {
+    let (tmp, play) = test_play();
+    let rom = tmp.path().join("GoldenEye 007 (USA).z64");
+    std::fs::write(&rom, b"\x80\x37\x12\x40 not really goldeneye").unwrap();
+    let id = shelve(&play, "GoldenEye 007", "N64", &rom);
+
+    let view = get(router(play.clone()), &format!("/api/game/{id}")).await;
+    assert_eq!(view.status, StatusCode::OK);
+    let phone = &view.json()["phone"];
+    assert_eq!(phone["system"], "n64");
+    assert_eq!(phone["problem"], serde_json::Value::Null);
+    let url = phone["rom"].as_str().expect("a rom address").to_string();
+    // The emulator picks the core by the address's extension.
+    assert!(url.ends_with("/game.z64"), "{url}");
+
+    let file = get(router(play.clone()), &url).await;
+    assert_eq!(file.status, StatusCode::OK);
+    assert_eq!(file.body, std::fs::read(&rom).unwrap());
+
+    let page = get(router(play), &format!("/phone?id={id}")).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(page.text().contains("/phone.js"));
+}
+
+#[tokio::test]
+async fn a_game_that_is_several_files_says_why_it_stays_on_the_machine() {
+    let (tmp, play) = test_play();
+    let cue = tmp.path().join("Disc.cue");
+    std::fs::write(&cue, b"FILE \"Disc.bin\" BINARY").unwrap();
+    let id = shelve(&play, "Disc", "PlayStation", &cue);
+
+    let view = get(router(play.clone()), &format!("/api/game/{id}")).await;
+    let phone = &view.json()["phone"];
+    assert_eq!(phone["system"], serde_json::Value::Null);
+    assert!(phone["problem"].as_str().unwrap().contains("several files"));
+
+    let file = get(router(play), &format!("/api/rom/{id}/game.cue")).await;
+    assert_eq!(file.status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn the_phones_emulator_is_served_from_the_machines_copy() {
+    let (tmp, play) = test_play();
+    let library = play.lock().unwrap().library.clone();
+    let pkg = library
+        .join("emulator")
+        .join(play_web::emulator::VERSION)
+        .join("emulatorjs");
+    std::fs::create_dir_all(pkg.join("package/data")).unwrap();
+    std::fs::write(pkg.join("package/data/loader.js"), "// the loader").unwrap();
+    std::fs::write(pkg.join(".complete"), "").unwrap();
+
+    let answer = get(router(play.clone()), "/emulator/loader.js").await;
+    assert_eq!(answer.status, StatusCode::OK);
+    assert!(answer.content_type.contains("javascript"));
+    assert_eq!(answer.text(), "// the loader");
+
+    let outside = get(router(play), "/emulator/../library.db").await;
+    assert_ne!(outside.status, StatusCode::OK);
+    drop(tmp);
+}

@@ -34,6 +34,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
+  // The emulator and its cores keep their own copies, and are far too big to
+  // keep twice.
+  if (url.pathname.startsWith("/emulator/")) return;
 
   // The network first, always, so a phone never runs last week's app against
   // this week's shelf. The cache is the answer only when there is no network.

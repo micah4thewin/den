@@ -1,4 +1,5 @@
 use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use axum::extract::{Path, Request, State};
@@ -9,7 +10,10 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use play_core::{Play, RunningGame};
 use serde::Serialize;
+use tower::util::ServiceExt;
+use tower_http::services::ServeFile;
 
+pub mod emulator;
 pub mod guard;
 pub mod net;
 pub mod views;
@@ -22,6 +26,8 @@ pub type SharedPlay = Arc<Mutex<Play>>;
 
 const INDEX_HTML: &[u8] = include_bytes!("../web/index.html");
 const APP_JS: &[u8] = include_bytes!("../web/app.js");
+const PHONE_HTML: &[u8] = include_bytes!("../web/phone.html");
+const PHONE_JS: &[u8] = include_bytes!("../web/phone.js");
 const STYLE_CSS: &[u8] = include_bytes!("../web/style.css");
 const SERVICE_WORKER: &[u8] = include_bytes!("../web/sw.js");
 const MANIFEST: &[u8] = include_bytes!("../web/manifest.webmanifest");
@@ -80,7 +86,19 @@ fn image(body: &'static [u8], mime: &'static str) -> Response {
     asset(body, mime, KEEP_A_WHILE)
 }
 
+#[derive(Clone)]
+struct Shelf {
+    play: SharedPlay,
+    /// Where the phone's emulator is kept once it has been downloaded.
+    emulator: PathBuf,
+}
+
 pub fn router(play: SharedPlay) -> Router {
+    let emulator = play
+        .lock()
+        .map(|play| play.library.join("emulator"))
+        .unwrap_or_else(|poisoned| poisoned.into_inner().library.join("emulator"));
+    let shelf = Shelf { play, emulator };
     Router::new()
         .route(
             "/",
@@ -90,6 +108,15 @@ pub fn router(play: SharedPlay) -> Router {
             "/app.js",
             get(|| async { page(APP_JS, "application/javascript; charset=utf-8") }),
         )
+        .route(
+            "/phone",
+            get(|| async { page(PHONE_HTML, "text/html; charset=utf-8") }),
+        )
+        .route(
+            "/phone.js",
+            get(|| async { page(PHONE_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route("/emulator/{*path}", get(emulator_file))
         .route(
             "/style.css",
             get(|| async { page(STYLE_CSS, "text/css; charset=utf-8") }),
@@ -122,12 +149,13 @@ pub fn router(play: SharedPlay) -> Router {
         )
         .route("/api/library", get(api_library))
         .route("/api/game/{id}", get(api_game))
+        .route("/api/rom/{id}/{file}", get(api_rom))
         .route("/api/launch/{id}", post(api_launch))
         .route("/api/stop/{id}", post(api_stop))
         .route("/api/stop", post(api_stop_all))
         .route("/api/status", get(api_status))
         .fallback(not_a_page)
-        .with_state(play)
+        .with_state(shelf)
         .layer(axum::middleware::from_fn(check_who_is_asking))
 }
 
@@ -186,19 +214,130 @@ struct StoppedView {
     stopped: usize,
 }
 
-async fn api_library(State(play): State<SharedPlay>) -> Response {
+async fn api_library(State(Shelf { play, .. }): State<Shelf>) -> Response {
     respond(play, views::library_view).await
 }
 
-async fn api_game(State(play): State<SharedPlay>, Path(id): Path<i64>) -> Response {
+async fn api_game(State(Shelf { play, .. }): State<Shelf>, Path(id): Path<i64>) -> Response {
     respond(play, move |play| views::game_view(play, id)).await
 }
 
-async fn api_launch(State(play): State<SharedPlay>, Path(id): Path<i64>) -> Response {
+/// The game itself, for the phone's emulator to run. Read-only, like the
+/// rest of the shelf, and served in pieces when the browser asks for ranges.
+async fn api_rom(
+    State(Shelf { play, .. }): State<Shelf>,
+    Path((id, _file)): Path<(i64, String)>,
+    request: Request,
+) -> Response {
+    let found = tokio::task::spawn_blocking(move || {
+        let play = play.lock().map_err(|_| "the library is busy".to_string())?;
+        let game = play
+            .db()
+            .get_game(id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "game not found".to_string())?;
+        if let Some(why) = views::phone_view(&game).problem {
+            return Err(why);
+        }
+        let path = PathBuf::from(&game.path);
+        if !path.is_file() {
+            return Err(format!(
+                "{} is no longer where the shelf put it: {}",
+                game.title, game.path
+            ));
+        }
+        Ok(path)
+    })
+    .await;
+    let path = match found {
+        Ok(Ok(path)) => path,
+        Ok(Err(message)) => {
+            let status = if message.contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            return in_words(status, &message);
+        }
+        Err(_) => {
+            return in_words(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "the request did not finish",
+            )
+        }
+    };
+    match ServeFile::new(path).oneshot(request).await {
+        Ok(response) => {
+            let mut response = response.into_response();
+            set(
+                &mut response,
+                header::CONTENT_TYPE,
+                "application/octet-stream",
+            );
+            response
+        }
+        Err(_) => in_words(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the game could not be read",
+        ),
+    }
+}
+
+fn set(response: &mut Response, name: HeaderName, value: &'static str) {
+    response
+        .headers_mut()
+        .insert(name, axum::http::HeaderValue::from_static(value));
+}
+
+/// A file of the phone's emulator, downloaded the first time any phone asks.
+async fn emulator_file(
+    State(Shelf { emulator, .. }): State<Shelf>,
+    Path(path): Path<String>,
+    request: Request,
+) -> Response {
+    let wanted = path.clone();
+    let found = tokio::task::spawn_blocking(move || emulator::file(&emulator, &wanted)).await;
+    let file = match found {
+        Ok(Ok(file)) => file,
+        Ok(Err(message)) => {
+            let status = if message.starts_with("There is no such file") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::BAD_GATEWAY
+            };
+            return in_words(status, &message);
+        }
+        Err(_) => {
+            return in_words(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "the request did not finish",
+            )
+        }
+    };
+    match ServeFile::new(file).oneshot(request).await {
+        Ok(response) => {
+            let mut response = response.into_response();
+            set(
+                &mut response,
+                header::CONTENT_TYPE,
+                emulator::content_type(&path),
+            );
+            // Pinned to one version, so a file at this address never changes.
+            set(&mut response, header::CACHE_CONTROL, KEEP_A_WHILE);
+            response
+        }
+        Err(_) => in_words(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the emulator could not be read",
+        ),
+    }
+}
+
+async fn api_launch(State(Shelf { play, .. }): State<Shelf>, Path(id): Path<i64>) -> Response {
     respond(play, move |play| play.launch(id).map_err(|e| e.to_string())).await
 }
 
-async fn api_stop(State(play): State<SharedPlay>, Path(id): Path<i64>) -> Response {
+async fn api_stop(State(Shelf { play, .. }): State<Shelf>, Path(id): Path<i64>) -> Response {
     respond(play, move |play| {
         Ok(StoppedView {
             stopped: play.stop(id),
@@ -207,7 +346,7 @@ async fn api_stop(State(play): State<SharedPlay>, Path(id): Path<i64>) -> Respon
     .await
 }
 
-async fn api_stop_all(State(play): State<SharedPlay>) -> Response {
+async fn api_stop_all(State(Shelf { play, .. }): State<Shelf>) -> Response {
     respond(play, |play| {
         Ok(StoppedView {
             stopped: play.stop_all(),
@@ -216,7 +355,7 @@ async fn api_stop_all(State(play): State<SharedPlay>) -> Response {
     .await
 }
 
-async fn api_status(State(play): State<SharedPlay>) -> Response {
+async fn api_status(State(Shelf { play, .. }): State<Shelf>) -> Response {
     respond(play, |play| {
         let playing = play.running();
         Ok(StatusView {
