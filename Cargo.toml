@@ -1,14 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/den-ident",
-  "crates/den-intake",
-  "crates/den-db",
-  "crates/den-runner",
-  "crates/den-input",
-  "crates/den-core",
-  "crates/den-web",
-  "crates/den-doctor",
+  "crates/play-ident",
+  "crates/play-intake",
+  "crates/play-db",
+  "crates/play-runner",
+  "crates/play-input",
+  "crates/play-core",
+  "crates/play-web",
+  "crates/play-doctor",
 ]
 
 [workspace.package]

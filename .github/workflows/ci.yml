@@ -26,7 +26,7 @@ jobs:
       - name: Tests
         run: cargo test --workspace
       - name: The diagnostic runs
-        run: cargo run -q -p den-doctor -- "$RUNNER_TEMP/den-ci-library"
+        run: cargo run -q -p play-doctor -- "$RUNNER_TEMP/play-ci-library"
 
   frontend:
     name: Desktop frontend

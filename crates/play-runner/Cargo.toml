@@ -1,0 +1,18 @@
+[package]
+name = "play-runner"
+description = "RetroArch process control, config generation, watchdog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+play-db = { path = "../play-db" }
+thiserror.workspace = true
+dirs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

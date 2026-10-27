@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Den are recorded here. The format follows
+All notable changes to Play are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 the build plan's milestones, not semver.
 
@@ -20,13 +20,17 @@ the build plan's milestones, not semver.
 - **One game, one process.** Launching a game that is already playing is
   refused by name instead of starting a second copy over the first one's
   config file and save RAM — which is what a double-tap on a phone used to do.
-- **The program ships under the name Play.** Window title, installer
-  name, wordmark, and every user-facing string say Play; the `den-*`
-  crates, the library directory (`~/.local/share/den`), and the `DEN_*`
-  environment variables keep their working names. Part of the family
-  rename: Chat (hearth, port 8888), Watch (lanflix, 7777), Play (den,
-  5555), Write (lockbox, 9999). The mark — a CRT with a play triangle —
-  did not change; it finally says the name out loud.
+- **The program is called Play, all the way down.** Window title, installer
+  name, wordmark, and every user-facing string say Play, and so do the
+  `play-*` crates, the `play-desktop` binary, the `dev.play.app` identifier,
+  the library directory (`~/.local/share/play`), and the `PLAY_*`
+  environment variables (`PLAY_WEB_PORT`, `PLAY_WEB_BIND`, `PLAY_WEB_HOSTS`,
+  `PLAY_RUNTIME_DIR`, `PLAY_SYSFS_INPUT`). On first launch a library left in
+  the old folder (`~/.local/share/den`) is moved over, with every path it
+  stores rewritten, so the shelf, saves and playtime come along. Part of the
+  family rename: Chat (port 8888), Watch (7777), Play (5555), Write (9999).
+  The mark — a CRT with a play triangle — did not change; it finally says
+  the name out loud.
 - **Squarer chrome.** The radius scale drops from 6/10/14/20 to 2/4/6/8,
   so buttons, tiles, and cards sit closer to right angles, and the intake
   status word trades its pill for a square-cornered tag.
@@ -36,7 +40,7 @@ the build plan's milestones, not semver.
   pointed at it.** Anyone can aim `games.example.com` at a private address and
   serve a page the browser then treats as Play's own; Play now answers only to
   address literals, names with no dot, and the `.ts.net`, `.local`,
-  `.internal` and `.lan` suffixes. `DEN_WEB_HOSTS` adds your own.
+  `.internal` and `.lan` suffixes. `PLAY_WEB_HOSTS` adds your own.
 - **Starting or stopping a game has to come from Play's own page.** A tab open
   on an unrelated site could post to a private address without being able to
   read the answer — enough to start a game on somebody's television. A
@@ -68,38 +72,38 @@ the build plan's milestones, not semver.
   sheet with the system, size, core, saves and time played, and a **Play on
   the machine** that is disabled with the reason written out when RetroArch or
   the core is missing — rather than launching on the first accidental tap.
-- `cargo run -p den-web --example shelf` serves a library on its own. The
+- `cargo run -p play-web --example shelf` serves a library on its own. The
   remote's page is the one part of Play that needs a browser to look at, and
   the desktop shell needs system packages a headless machine will not have.
-- `crates/den-web` — the LAN remote: while the desktop app is open it
+- `crates/play-web` — the LAN remote: while the desktop app is open it
   serves the shelf to every browser on the network at `0.0.0.0:5555` —
   filter the shelf, tap a game, and it starts on the machine the library
-  lives on. Read-and-launch only; `DEN_WEB_PORT` moves it, `=0` turns it
-  off, `DEN_WEB_BIND` narrows it. The shell's library/game views moved
-  into `den-web::views` so the desktop IPC and the remote serve the same
+  lives on. Read-and-launch only; `PLAY_WEB_PORT` moves it, `=0` turns it
+  off, `PLAY_WEB_BIND` narrows it. The shell's library/game views moved
+  into `play-web::views` so the desktop IPC and the remote serve the same
   data from the same code.
-- `crates/den-ident` — SHA-1/CRC32 hashing, magic-byte sniffing, and the DAT
+- `crates/play-ident` — SHA-1/CRC32 hashing, magic-byte sniffing, and the DAT
   (No-Intro/Redump-style) index. Pure, builds headless.
-- `crates/den-db` — SQLite (WAL) library: games, variants, saves, sessions,
+- `crates/play-db` — SQLite (WAL) library: games, variants, saves, sessions,
   BIOS files, and intake reports.
-- `crates/den-intake` — the drop pipeline: stage, unpack (zip/7z/rar/tar/gz,
+- `crates/play-intake` — the drop pipeline: stage, unpack (zip/7z/rar/tar/gz,
   nested, salvage corrupt archives), identify, repair (cue generation, m3u
   playlists), shelve (hash dedupe, BIOS filing, `_extras`), and report with the
   house word vocabulary (`added`, `duplicate`, `repaired`, `probable`, `bios`,
   `extra`, `quarantined`, `unsupported`).
-- `crates/den-runner` — RetroArch process control and private per-session config
+- `crates/play-runner` — RetroArch process control and private per-session config
   generation (autosave every 60s, atomic state dirs).
-- `crates/den-input` — gamepad detection from `/sys/class/input`.
-- `crates/den-core` — the glue object (`Den`) the shell talks to.
+- `crates/play-input` — gamepad detection from `/sys/class/input`.
+- `crates/play-core` — the glue object (`Play`) the shell talks to.
 - `apps/desktop/` — Tauri v2 shell scaffold: design-system port (tokens, base,
   animations, six Gilroy/Avenir faces, `createElementNS` icon table, brand
   mark), and the four screens (Library, Game, Intake, Controllers) in HTML/CSS.
-- **A keyboard scheme, written and shown from one table.** Den binds player
+- **A keyboard scheme, written and shown from one table.** Play binds player
   one's keys in every session config and lists them on the Controllers screen
   from the same source, so the screen cannot promise a key the game does not
   answer to. Arrow keys, `Z`/`X`/`A`/`S` for the face buttons in the shape
   they sit on a pad, `Enter` and `Right Shift`, and `Escape` to get back to
-  Den. It means there is a way to play before any controller is involved.
+  Play. It means there is a way to play before any controller is involved.
 - **Pads are remembered by what they are**, not by which node they turned up
   as: vendor, product and reported name, so unplugging a pad and bringing it
   back keeps its player. Two identical pads get separate identities, in
@@ -107,9 +111,9 @@ the build plan's milestones, not semver.
 - "Nobody" is a real answer for a pad, kept apart from "never seen" — without
   that difference it would be a control that does nothing, since the next look
   at the controllers would helpfully assign the pad again.
-- `den-doctor` reports each pad's player and identity, and prints the keyboard
+- `play-doctor` reports each pad's player and identity, and prints the keyboard
   scheme.
-- **A RetroArch can be bundled inside Den.** `tools/bundle_runtime.py` stages
+- **A RetroArch can be bundled inside Play.** `tools/bundle_runtime.py` stages
   one into `apps/desktop/src-tauri/resources/runtime/`, which the Tauri bundle
   ships and the shell hands to the runner as the first place it looks. Three
   sources: an archive you downloaded (an AppImage, `.zip`, `.tar.*`, `.7z`, or
@@ -120,7 +124,7 @@ the build plan's milestones, not semver.
   because bundling turns other people's licence terms into yours: RetroArch is
   GPLv3, and `snes9x`, `genesis_plus_gx` and `fbneo` carry non-commercial
   terms.
-- **`den-doctor`** — a headless diagnostic. Every path Den tried, what was
+- **`play-doctor`** — a headless diagnostic. Every path Play tried, what was
   actually at each one, which answer it settled on, which cores are installed,
   which controllers are attached. It builds without a WebView, so it runs on a
   machine that cannot build the app.
@@ -130,19 +134,19 @@ the build plan's milestones, not semver.
   offers the automatic search back when the chosen one stops working.
 - **Play sessions are recorded.** A launch opens a row in `sessions` and
   closes it when the emulator exits, which is what fills the library's
-  Continue row, its Recent shelf, and a game's playtime. `Den::reap` closes
+  Continue row, its Recent shelf, and a game's playtime. `Play::reap` closes
   finished sessions and reaps the child process; the shell calls it before
   every read of the library. Nothing wrote to that table before, so those
   three surfaces could never show anything.
 - **Imported saves are attached to their game.** A `.srm` or state that comes
   in beside a ROM is recorded against it, not merely copied into `_extras`.
 - A tally on the intake report card: the same eight words, counted.
-- `README.md`, `docs/design-notes.md` (how Den wears the shared design
+- `README.md`, `docs/design-notes.md` (how Play wears the shared design
   system), and `.github/workflows/ci.yml` — formatting, clippy, tests, the
   frontend build, the Tauri shell, and the brand check that `docs/DESIGN.md`
   says runs in CI.
-- Integration tests for the whole drop pipeline (`crates/den-intake/tests`)
-  and for the glue object and its sessions (`crates/den-core/tests`).
+- Integration tests for the whole drop pipeline (`crates/play-intake/tests`)
+  and for the glue object and its sessions (`crates/play-core/tests`).
 
 ### Fixed
 - **`hidden` did nothing** on the remote's playing and trouble bars: an
@@ -159,7 +163,7 @@ the build plan's milestones, not semver.
   `Added`, `Duplicate`, `Repaired`, because the serialized variant name leaked
   through as the word. The word is lowercase everywhere now, and reports
   already saved in the old capitalized form still read back.
-- **The pad was plugged in and the game could not see it.** Den handed
+- **The pad was plugged in and the game could not see it.** Play handed
   RetroArch the kernel's `jsN` number as `input_playerN_joypad_index`, but
   RetroArch's udev joypad driver fills its slots densely from 0 in its own
   attach order and never reads `jsN` numbers — so a lone controller that came
@@ -176,11 +180,11 @@ the build plan's milestones, not semver.
   assignment reaches RetroArch as `input_playerN_joypad_index`.
 - **Detection asked what a device was called, not what it is.** The keyword
   list missed the one every Linux machine has: the kernel calls an Xbox pad
-  `Microsoft X-Box 360 pad`, and `x-box` is not `xbox`. Den now takes the
+  `Microsoft X-Box 360 pad`, and `x-box` is not `xbox`. Play now takes the
   kernel's own answer — a `js` node, or `BTN_GAMEPAD` in the capability
   bitmask, which is what udev looks at — and reports pads in joystick order,
   which is the order RetroArch counts them in.
-- **The runtime bundler put the binary where Den never looks.** Published
+- **The runtime bundler put the binary where Play never looks.** Published
   builds unpack into a wrapper directory, and the staging directory has a
   committed README in it, so the "lift the wrapper if it is the only entry"
   rule never fired on the real case — and failed quietly, reporting a staged
@@ -205,37 +209,37 @@ the build plan's milestones, not semver.
   restart and then silently did not. A non-UTF-8 path was stored lossily and
   came back pointing somewhere else; it is refused with a reason now.
 - A launch whose session row could not be written dropped the process handle,
-  leaking an emulator Den could never reap.
+  leaking an emulator Play could never reap.
 - **PlayStation 2, GameCube and Wii were blamed on a missing core.** They
   cannot be launched at all yet, so the Core Downloader would not have helped.
   Play now gives one reason, and it is the true one.
 - Accessibility: the Play button carries its reason programmatically
   (`aria-describedby`) rather than merely beside it; the RetroArch notice is a
   live region, so choosing or clearing one is announced; a re-render no longer
-  drops focus to `<body>` or folds the "Where Den looked" list shut under
+  drops focus to `<body>` or folds the "Where Play looked" list shut under
   whoever was reading it.
-- `den-doctor` created a library as a side effect of diagnosing one, and its
+- `play-doctor` created a library as a side effect of diagnosing one, and its
   closing advice omitted the only thing that fixes a stale chosen path.
 - The build called `python3`, which a stock Windows Python install does not
   provide; `tools/run-python.mjs` asks the machine what it has, and a machine
   with no Python still builds, without a bundled runtime.
 - **`Fatal error received in: "init_libretro_symbols()"`.** RetroArch's way of
-  saying it could not load the core. Den passed `-L` a bare file name whenever
+  saying it could not load the core. Play passed `-L` a bare file name whenever
   it had not found a cores directory, and its guesses at that directory never
-  asked RetroArch. Den now reads `libretro_directory` out of the person's own
+  asked RetroArch. Play now reads `libretro_directory` out of the person's own
   `retroarch.cfg` — the only authority on where their cores are — and **checks
   the core is there before launching**, so a missing core is named, with what
   to do about it, instead of the emulator dying of it. The Game screen says so
   before the press, and disables Play.
-- **Launching through Den discarded every RetroArch setting.** `--config`
+- **Launching through Play discarded every RetroArch setting.** `--config`
   replaces a configuration rather than adding to it, so a session ran with
-  none of the person's video driver, pad bindings or shaders. Den now starts
+  none of the person's video driver, pad bindings or shaders. Play now starts
   from their file and overrides only the handful of keys it has an opinion
   about.
 - **The Flatpak and Snap wrappers were resolved into the multiplexer behind
   them.** `/var/lib/flatpak/exports/bin/org.libretro.RetroArch` is a symlink to
   `/usr/bin/flatpak`, which behaves like RetroArch only because it looks at
-  the name it was invoked under; `canonicalize` threw that name away. Den
+  the name it was invoked under; `canonicalize` threw that name away. Play
   spawned `flatpak` with a ROM appended, got a usage message, reported a
   successful launch and opened a session row — the worst kind of failure,
   the silent one. Paths are made absolute now without following symlinks.
@@ -256,12 +260,12 @@ the build plan's milestones, not semver.
   where it is.** Three things now stand between that and a person who wants to
   play a game: the search covers more (Linux desktop entries, `/opt`, and the
   places the last round missed); **Choose RetroArch…** on the Library screen
-  points Den at any binary and keeps the choice with the library; and
-  `den-doctor` prints every path tried and what was at each one, so a report
+  points Play at any binary and keeps the choice with the library; and
+  `play-doctor` prints every path tried and what was at each one, so a report
   of "it still cannot find it" has an answer in it.
 - A Flatpak desktop entry reads `Exec=/usr/bin/flatpak run
   org.libretro.RetroArch`, and taking the first token of that would have had
-  Den launch `flatpak` itself with a ROM appended — a usage message and no
+  Play launch `flatpak` itself with a ROM appended — a usage message and no
   emulator. Only a program whose own name says RetroArch is taken from a
   desktop entry; the Flatpak wrapper is already in the list under its own
   path.
@@ -275,19 +279,19 @@ the build plan's milestones, not semver.
   last, for a bundle that flattened the staged tree.
 - **RetroArch was only ever looked for as `retroarch` on `PATH`,** resolved
   once at startup. That misses the macOS app bundle (never on `PATH`),
-  `retroarch.exe` on Windows (so Den could not launch anything there at all),
+  `retroarch.exe` on Windows (so Play could not launch anything there at all),
   the Flatpak build (exported as `org.libretro.RetroArch`), and any install a
   GUI app's `PATH` does not reach — on macOS that is `/usr/bin:/bin:` and two
-  more, so a Homebrew RetroArch is invisible. Den now asks `PATH` under every
+  more, so a Homebrew RetroArch is invisible. Play now asks `PATH` under every
   name RetroArch goes by, then the places the installers actually use, and it
   asks again on every launch rather than only when the app started.
 - **The core was passed to `-L` as a bare word** (`mesen_libretro`), which is
-  not the name of a file on any platform. Den resolves the core to its real
+  not the name of a file on any platform. Play resolves the core to its real
   path when it can find one, falls back to the platform's file name when it
   cannot, and writes `libretro_directory` into the generated config — which
   `--config` would otherwise blank out.
 - **Nothing said RetroArch was missing until you pressed Play.** The Library
-  screen carries a standing notice with the reason and every path Den tried,
+  screen carries a standing notice with the reason and every path Play tried,
   and Play is disabled with a sentence beside it rather than answering a press
   with an error toast. `LibraryView` had carried a `retroarch` flag all along
   that the interface never read.
@@ -341,7 +345,7 @@ the build plan's milestones, not semver.
 - `open_library_folder` waited for the file manager to exit while holding the
   library lock.
 - Six `@font-face` rules asked for handwriting faces this repository does not
-  ship (lockbox's whiteboard, not Den's), and `index.html` had no icon link.
+  ship (lockbox's whiteboard, not Play's), and `index.html` had no icon link.
 
 ### Changed
 - **The depth scale is softer.** The shadows and highlights that make a
@@ -380,13 +384,13 @@ the build plan's milestones, not semver.
   so an unverified URL cannot be silently trusted. One
   `--from-manifest --record` run on a networked machine pins them.
   `--from-archive` and `--from-system` need no network and are tested.
-- Cores are not installed for you. Den points RetroArch at the right core for
+- Cores are not installed for you. Play points RetroArch at the right core for
   a system; RetroArch downloads cores itself, and `--from-system` copies the
   ones already installed.
 - A bundled `--from-system` RetroArch is linked against the libraries of the
   machine that built it. For a bundle to hand to somebody else, stage one of
   libretro's portable builds with `--from-archive`.
-- `den-input` reads evdev names directly; gilrs + SDL gamecontrollerdb is the
+- `play-input` reads evdev names directly; gilrs + SDL gamecontrollerdb is the
   planned upgrade.
 - The intake screen has no password field, so an encrypted archive is
   quarantined as password-protected rather than prompting for one.

@@ -11,7 +11,7 @@ const rect = (x: number, y: number, width: number, height: number, rx = 2): Shap
 const solid = (d: string): Shape => ["path", { d, fill: "currentColor", stroke: "none" }];
 
 const ICONS: Record<string, Shape[]> = {
-  brandDen: [
+  brandPlay: [
     ["path", {
       d: "M 5 7 H 19 A 2 2 0 0 1 21 9 V 16 "
         + "A 2 2 0 0 1 19 18 H 5 A 2 2 0 0 1 3 16 "

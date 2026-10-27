@@ -1,7 +1,5 @@
 # Play
 
-*(This is the `den` repository; the program it builds now ships under the name **Play**.)*
-
 A quiet place to play the games you already own.
 
 Play is a local-first launcher. Point it at a folder of downloads and it
@@ -31,14 +29,14 @@ the shared design system.
 ## Layout
 
 ```
-crates/den-ident     hashing, magic bytes, the DAT index
-crates/den-intake    stage, unpack, identify, repair, shelve, report
-crates/den-db        SQLite (WAL): games, saves, sessions, BIOS, reports
-crates/den-runner    RetroArch process control and per-session config
-crates/den-input     controller detection
-crates/den-core      the one object the shell talks to
-crates/den-web       the remote: the shelf in any browser on your network or tailnet
-crates/den-doctor    `den-doctor`: what Play can and cannot find on this machine
+crates/play-ident     hashing, magic bytes, the DAT index
+crates/play-intake    stage, unpack, identify, repair, shelve, report
+crates/play-db        SQLite (WAL): games, saves, sessions, BIOS, reports
+crates/play-runner    RetroArch process control and per-session config
+crates/play-input     controller detection
+crates/play-core      the one object the shell talks to
+crates/play-web       the remote: the shelf in any browser on your network or tailnet
+crates/play-doctor    `play-doctor`: what Play can and cannot find on this machine
 apps/desktop         the Tauri v2 shell: four screens over a typed IPC layer
 tools/               the brand sheet, the icon generator, the runtime bundler
 ```
@@ -79,9 +77,9 @@ the `.deb` has already been written and installs on its own; a
 half-downloaded tool fails the same way, and deleting `~/.cache/tauri`
 makes the next build fetch it fresh. `npm run deb` skips the AppImage
 entirely. One more note for machines that installed a build from before
-the rename: the package used to be called `den` and is now `play`, and
-both carry `/usr/bin/den-desktop`, so `sudo apt remove den` clears the
-way for the first `play` install.
+the rename: that package went by the program's old name, so
+`sudo apt remove den` clears the way for the first `play` install. The first
+launch moves an old library (`~/.local/share/den`) to `~/.local/share/play`.
 
 The application icons are generated, never hand-drawn. To change the mark,
 edit `tools/brand.py`, then:
@@ -109,7 +107,7 @@ happens, and Play takes the first one that works:
 If none of that finds yours, ask:
 
 ```sh
-cargo run -p den-doctor
+cargo run -p play-doctor
 ```
 
 It prints every path Play tried, what was actually at each one, which answer it
@@ -148,7 +146,7 @@ publishing a bundle means reading those terms. The script prints what it
 staged and under what licence, so the question is at least visible.
 
 **Cores are downloaded by RetroArch**, not by Play — Online Updater → Core
-Downloader. `--from-system` copies the ones you already have; `den-doctor`
+Downloader. `--from-system` copies the ones you already have; `play-doctor`
 lists which of Play's defaults are present.
 
 ## Controls
@@ -170,7 +168,7 @@ There is always a keyboard, whether or not a pad turned up:
 | Save / load state | <kbd>F2</kbd> <kbd>F4</kbd> | | Fullscreen | <kbd>F11</kbd> |
 
 Play writes these into the config it hands RetroArch and shows the same table
-on the Controllers screen, both from one table in `den-runner`, so what is on
+on the Controllers screen, both from one table in `play-runner`, so what is on
 screen is what the keys do. Everything else in your RetroArch configuration
 is inherited untouched.
 
@@ -214,7 +212,7 @@ origin — so Android will offer to install the shelf properly rather than
 bookmark it (see below), and the address is a name you can remember.
 
 To keep the remote *only* on the tailnet, bind it to the tailnet address:
-`DEN_WEB_BIND=100.x.y.z`, or `DEN_WEB_BIND=127.0.0.1` with `tailscale serve`
+`PLAY_WEB_BIND=100.x.y.z`, or `PLAY_WEB_BIND=127.0.0.1` with `tailscale serve`
 in front of it.
 
 ### On the phone
@@ -245,15 +243,15 @@ extends. Two things are refused, and both cost one header to check:
 - **A name that is not ours.** Anyone can point a public name at a private
   address and serve you a page the browser then treats as Play's own. Play
   answers to addresses, to names with no dot in them, and to `.ts.net`,
-  `.local`, `.internal` and `.lan`. `DEN_WEB_HOSTS=games.example.com` adds
+  `.local`, `.internal` and `.lan`. `PLAY_WEB_HOSTS=games.example.com` adds
   your own.
 - **A press from somebody else's page.** A tab open on an unrelated site can
   post to a private address without being able to read the answer, which is
   enough to start a game on your television. Anything that changes something
   has to come from Play's own page.
 
-`DEN_WEB_PORT` moves the remote, `DEN_WEB_PORT=0` turns it off, and
-`DEN_WEB_BIND` narrows what it listens on.
+`PLAY_WEB_PORT` moves the remote, `PLAY_WEB_PORT=0` turns it off, and
+`PLAY_WEB_BIND` narrows what it listens on.
 
 ### Working on it
 
@@ -262,14 +260,14 @@ and the desktop shell needs system packages a headless machine will not have.
 It can be served on its own, from the same code the app runs:
 
 ```sh
-cargo run -p den-web --example shelf              # the real library
-cargo run -p den-web --example shelf -- /some/den # another one
+cargo run -p play-web --example shelf              # the real library
+cargo run -p play-web --example shelf -- /some/play # another one
 ```
 
 ## Running it
 
 On first launch Play creates a library under your platform's data directory
-(`~/.local/share/den` on Linux) and opens on an empty shelf. Go to **Intake**,
+(`~/.local/share/play` on Linux) and opens on an empty shelf. Go to **Intake**,
 press the drop zone or **Choose a folder…**, and point it at a folder of
 downloads. Everything is copied into the library; the originals are left
 exactly as they were.

@@ -229,7 +229,7 @@ def test_manifest_download(tmp):
         check("--record pins the hash and stages", staged_binary(dest) is not None, result.stderr)
         check("  and writes the hash into the manifest", bool(read_manifest()), str(read_manifest()))
         check(
-            "  and the binary lands where den-runner looks",
+            "  and the binary lands where play-runner looks",
             staged_binary(dest) == os.path.join(dest, "retroarch"),
             f"got {staged_binary(dest)}",
         )

@@ -2,24 +2,24 @@ mod commands;
 
 use std::sync::{Arc, Mutex};
 
-use den_core::Den;
+use play_core::Play;
 use tauri::Manager;
 
 struct AppState {
-    den: den_web::SharedDen,
+    play: play_web::SharedPlay,
 }
 
 type CommandResult<T> = Result<T, String>;
 
-fn with_den<T>(
+fn with_play<T>(
     state: &tauri::State<'_, AppState>,
-    f: impl FnOnce(&Den) -> CommandResult<T>,
+    f: impl FnOnce(&Play) -> CommandResult<T>,
 ) -> CommandResult<T> {
-    let den = state
-        .den
+    let play = state
+        .play
         .lock()
         .map_err(|_| "the library is busy".to_string())?;
-    f(&den)
+    f(&play)
 }
 
 pub fn run() {
@@ -27,27 +27,32 @@ pub fn run() {
 
     tauri::Builder::default()
         .setup(|app| {
-            let library = Den::default_library();
-            let den = Den::open(&library)
+            match Play::adopt_old_library() {
+                Ok(Some(old)) => log::info!("moved the library from {}", old.display()),
+                Ok(None) => {}
+                Err(e) => log::warn!("could not move the old library: {e}"),
+            }
+            let library = Play::default_library();
+            let play = Play::open(&library)
                 .map_err(|e| format!("could not open the library at {}: {e}", library.display()))
                 .unwrap_or_else(|e| {
                     log::error!("{e}");
                     std::process::exit(1);
                 });
             match app.path().resource_dir() {
-                Ok(dir) => den.set_runtime_dir(Some(dir)),
+                Ok(dir) => play.set_runtime_dir(Some(dir)),
                 Err(e) => log::warn!("no resource directory: {e}"),
             }
-            let shared: den_web::SharedDen = Arc::new(Mutex::new(den));
-            if let Some(addr) = den_web::addr_from_env() {
+            let shared: play_web::SharedPlay = Arc::new(Mutex::new(play));
+            if let Some(addr) = play_web::addr_from_env() {
                 let for_server = shared.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = den_web::serve(for_server, addr).await {
+                    if let Err(e) = play_web::serve(for_server, addr).await {
                         log::warn!("the web remote could not start on {addr}: {e}");
                     }
                 });
             }
-            app.manage(AppState { den: shared });
+            app.manage(AppState { play: shared });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

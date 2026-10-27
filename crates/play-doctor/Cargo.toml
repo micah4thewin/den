@@ -1,0 +1,19 @@
+[package]
+name = "play-doctor"
+description = "Say what Play can and cannot find on this machine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "play-doctor"
+path = "src/main.rs"
+
+[dependencies]
+play-core = { path = "../play-core" }
+play-ident = { path = "../play-ident" }
+play-runner = { path = "../play-runner" }
+
+[lints]
+workspace = true

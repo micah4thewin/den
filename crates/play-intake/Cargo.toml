@@ -1,0 +1,25 @@
+[package]
+name = "play-intake"
+description = "Unpack, identify, repair, file, and report for Play"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+play-ident = { path = "../play-ident" }
+play-db = { path = "../play-db" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true
+tempfile.workspace = true
+zip.workspace = true
+sevenz-rust.workspace = true
+tar.workspace = true
+flate2.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true
