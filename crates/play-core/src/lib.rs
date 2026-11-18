@@ -1,9 +1,11 @@
+pub mod art;
+
 pub use play_db::{Db, Game, Save};
 use play_ident::dat::Index;
 use play_ident::System;
 pub use play_input::ControllerInfo;
 use play_intake::IntakeOptions;
-pub use play_intake::Report;
+pub use play_intake::{Outcome, Report};
 use play_runner::{PlayerBinding, Runner, Running};
 use serde::Serialize;
 use std::fs;
@@ -175,13 +177,38 @@ impl Play {
     }
 
     pub fn intake(&self, drop: &Path, password: Option<String>) -> Result<Report, Error> {
+        self.intake_many(&[drop.to_path_buf()], password)
+    }
+
+    /// Everything dropped at once: any mix of files, folders and archives.
+    pub fn intake_many(
+        &self,
+        drops: &[PathBuf],
+        password: Option<String>,
+    ) -> Result<Report, Error> {
         let opts = IntakeOptions {
             library: self.library.clone(),
             dat: &self.dat,
             db: Some(&self.db),
             password,
         };
-        Ok(play_intake::run_intake(drop, &opts)?)
+        Ok(play_intake::run_intake_many(drops, &opts)?)
+    }
+
+    /// Look for covers for games that have none, without waiting for them.
+    pub fn fetch_art_in_background(&self) {
+        if art::enabled(&self.db) {
+            art::in_background(self.library.clone());
+        }
+    }
+
+    /// The cover on file for a game, if it has one.
+    pub fn art_path(&self, game_id: i64) -> Option<PathBuf> {
+        let game = self.db.get_game(game_id).ok()??;
+        game.art?;
+        // Only ever the file in the library's own cover folder, whatever the
+        // database says.
+        art::cover_file(&self.library, game_id)
     }
 
     pub fn launch(&self, game_id: i64) -> Result<LaunchInfo, Error> {

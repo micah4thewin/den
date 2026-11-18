@@ -7,7 +7,7 @@ mod util;
 pub use bios::BiosIndex;
 pub use identify::{identify, FileKind, Identification};
 pub use shelve::Shelf;
-pub use unpack::{unpack_recursive, UnpackError, UnpackFailure};
+pub use unpack::{unpack_recursive, UnpackError, UnpackFailure, Unpacked};
 
 use play_db::now;
 use play_ident::dat::Index;
@@ -88,25 +88,60 @@ pub enum IntakeError {
 }
 
 pub fn run_intake(drop: &Path, opts: &IntakeOptions) -> Result<Report, IntakeError> {
-    let started = now();
-    let staging = tempfile::tempdir()?;
-    let root = staging.path().join("drop");
-    fs::create_dir_all(&root)?;
-    copy_tree(drop, &root)?;
+    run_intake_many(&[drop.to_path_buf()], opts)
+}
 
-    let (leaves, failures) = unpack_recursive(&root, opts.dat, opts.password.as_deref());
+/// Take in everything that was dropped at once: files, folders and archives,
+/// in any mix. Nothing in the drop is written to; what archives hold is
+/// unpacked into a staging folder inside the library, which goes away after.
+pub fn run_intake_many(drops: &[PathBuf], opts: &IntakeOptions) -> Result<Report, IntakeError> {
+    let started = now();
+    // Staging lives beside the library, not in the system temp folder: a
+    // disc image can be bigger than a RAM-backed /tmp, and the copy onto the
+    // shelf is then a move within one disk.
+    let staging_root = opts.library.join("_staging");
+    fs::create_dir_all(&staging_root)?;
+    let staging = tempfile::Builder::new()
+        .prefix("intake-")
+        .tempdir_in(&staging_root)?;
+
+    let unpacked = unpack_recursive(drops, staging.path(), opts.dat, opts.password.as_deref());
 
     let mut shelf = Shelf::new(&opts.library, opts.dat, opts.db);
     let mut entries = Vec::new();
-    for failure in failures {
+    for failure in unpacked.unreadable.iter().chain(unpacked.failures.iter()) {
         entries.push(ReportEntry {
             input: failure.path.display().to_string(),
             outcome: Outcome::Quarantined {
-                reason: failure.reason,
+                reason: failure.reason.clone(),
             },
         });
     }
-    entries.extend(shelf.shelve_all(&leaves));
+    for (volume, note) in &unpacked.volumes {
+        entries.push(ReportEntry {
+            input: volume.display().to_string(),
+            outcome: Outcome::Extra {
+                note: format!("archive volume, {note}"),
+            },
+        });
+    }
+    entries.extend(shelf.shelve_all(&unpacked.leaves));
+
+    let shown = |raw: &str| -> String {
+        let real = unpacked.label(Path::new(raw));
+        for drop in drops {
+            let base = drop.parent().unwrap_or(drop);
+            if let Ok(rest) = real.strip_prefix(base) {
+                if !rest.as_os_str().is_empty() {
+                    return slashed(rest);
+                }
+            }
+        }
+        real.display().to_string()
+    };
+    for entry in entries.iter_mut() {
+        entry.input = shown(&entry.input);
+    }
 
     let report = Report {
         started,
@@ -118,19 +153,18 @@ pub fn run_intake(drop: &Path, opts: &IntakeOptions) -> Result<Report, IntakeErr
             db.add_report(&json).ok();
         }
     }
+    drop(staging);
+    let _ = fs::remove_dir(&staging_root);
     Ok(report)
 }
 
-fn copy_tree(src: &Path, dest: &Path) -> std::io::Result<()> {
-    if src.is_dir() {
-        fs::create_dir_all(dest)?;
-        for entry in fs::read_dir(src)? {
-            let entry = entry?;
-            copy_tree(&entry.path(), &dest.join(entry.file_name()))?;
-        }
-        Ok(())
+/// A path inside a drop, written the same way on every system.
+fn slashed(path: &Path) -> String {
+    let text = path.display().to_string();
+    if cfg!(windows) {
+        text.replace('\\', "/")
     } else {
-        fs::copy(src, dest).map(|_| ())
+        text
     }
 }
 

@@ -9,12 +9,13 @@ members = [
   "crates/play-core",
   "crates/play-web",
   "crates/play-doctor",
+  "crates/play-art",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.93"
 license = "MIT"
 
 [workspace.dependencies]
@@ -29,10 +30,14 @@ dirs = "5"
 sha1 = "0.10"
 crc32fast = "1"
 
-zip = { version = "2", default-features = false, features = ["deflate", "aes-crypto"] }
-sevenz-rust = { version = "0.6", default-features = false }
+zip = { version = "2", default-features = false, features = ["deflate", "deflate64", "bzip2", "lzma", "zstd", "aes-crypto"] }
+sevenz-rust2 = { version = "0.25", default-features = false, features = ["aes256", "bzip2", "ppmd", "deflate", "zstd", "brotli", "lz4", "util"] }
+unrar = "0.5"
 tar = "0.4"
 flate2 = "1"
+bzip2 = "0.6"
+lzma-rs = "0.3"
+zstd = "0.13"
 
 rusqlite = { version = "0.32", features = ["bundled"] }
 

@@ -161,7 +161,8 @@ impl<'a> Shelf<'a> {
         self.remember(&title, &game_dir, None);
 
         if already {
-            self.file_variant(src, &game_dir, &file_name);
+            // Byte-for-byte the same as what is on the shelf: a second copy
+            // would only cost disk.
             self.note_hash(sha1);
             return ReportEntry {
                 input: src.display().to_string(),
@@ -335,13 +336,6 @@ impl<'a> Shelf<'a> {
         self.shelve_extra(src, "orphan cue sheet")
     }
 
-    fn file_variant(&self, src: &Path, game_dir: &Path, file_name: &str) {
-        let variants = game_dir.join("_variants");
-        fs::create_dir_all(&variants).ok();
-        let n = count_files(&variants);
-        fs::copy(src, variants.join(format!("{}.{}", n + 1, file_name))).ok();
-    }
-
     fn record_game(
         &self,
         title: &str,
@@ -470,10 +464,6 @@ fn write_cue(game_dir: &Path, bin_name: &str, system: System) {
         .unwrap_or_else(|| "disc".to_string());
     let cue = format!("FILE \"{bin_name}\" BINARY\n  TRACK 01 {mode}\n    INDEX 01 00:00:00\n");
     fs::write(game_dir.join(format!("{stem}.cue")), cue).ok();
-}
-
-fn count_files(dir: &Path) -> usize {
-    fs::read_dir(dir).map(|rd| rd.count()).unwrap_or(0)
 }
 
 fn size_of(src: &Path) -> Option<i64> {

@@ -17,6 +17,9 @@ pub enum Archive {
     SevenZ,
     Rar,
     Gzip,
+    Bzip2,
+    Xz,
+    Zstd,
     Tar,
 }
 
@@ -54,6 +57,19 @@ pub fn kinds(head: &[u8]) -> Kind {
     }
     if head.starts_with(&[0x1f, 0x8b]) {
         return Kind::Archive(Archive::Gzip);
+    }
+    if head.starts_with(b"BZh")
+        && head.len() >= 10
+        && (b'1'..=b'9').contains(&head[3])
+        && &head[4..10] == b"1AY&SY"
+    {
+        return Kind::Archive(Archive::Bzip2);
+    }
+    if head.starts_with(&[0xfd, b'7', b'z', b'X', b'Z', 0x00]) {
+        return Kind::Archive(Archive::Xz);
+    }
+    if head.starts_with(&[0x28, 0xb5, 0x2f, 0xfd]) {
+        return Kind::Archive(Archive::Zstd);
     }
     if head.len() >= 262 && &head[257..262] == b"ustar" {
         return Kind::Archive(Archive::Tar);
@@ -104,6 +120,20 @@ mod tests {
         assert_eq!(
             kinds(&[0x1f, 0x8b, 0x08, 0x00]),
             Kind::Archive(Archive::Gzip)
+        );
+    }
+
+    #[test]
+    fn bzip2_xz_and_zstd() {
+        assert_eq!(kinds(b"BZh91AY&SYrest"), Kind::Archive(Archive::Bzip2));
+        assert_eq!(kinds(b"BZhello world"), Kind::Unknown);
+        assert_eq!(
+            kinds(&[0xfd, b'7', b'z', b'X', b'Z', 0x00, 0x00]),
+            Kind::Archive(Archive::Xz)
+        );
+        assert_eq!(
+            kinds(&[0x28, 0xb5, 0x2f, 0xfd, 0x00]),
+            Kind::Archive(Archive::Zstd)
         );
     }
 
