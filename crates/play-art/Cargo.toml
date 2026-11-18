@@ -1,0 +1,20 @@
+[package]
+name = "play-art"
+description = "Box art for Play: pick the right cover by name, fetch it once, keep it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+play-ident = { path = "../play-ident" }
+flate2.workspace = true
+log.workspace = true
+thiserror.workspace = true
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -12,6 +12,8 @@ play-intake = { path = "../play-intake" }
 play-db = { path = "../play-db" }
 play-runner = { path = "../play-runner" }
 play-input = { path = "../play-input" }
+play-art = { path = "../play-art" }
+log.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 dirs.workspace = true

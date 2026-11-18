@@ -14,6 +14,7 @@ path = "src/main.rs"
 play-core = { path = "../play-core" }
 play-ident = { path = "../play-ident" }
 play-runner = { path = "../play-runner" }
+play-art = { path = "../play-art" }
 
 [lints]
 workspace = true

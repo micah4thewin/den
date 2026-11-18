@@ -42,6 +42,16 @@ fn main() {
             .unwrap_or_else(|e| e.to_string())
     );
 
+    println!("\nBuilt in");
+    println!("  archives      zip, 7z, rar, tar, gz, bz2, xz, zst, split .001 sets");
+    println!("                (read inside Play itself: nothing to install)");
+    let names = play_art::total_names();
+    println!("  box art index {names} names; covers are fetched once and kept");
+    let covers = std::fs::read_dir(library.join("_art"))
+        .map(|rd| rd.count())
+        .unwrap_or(0);
+    println!("  covers here   {covers}");
+
     println!("\nEnvironment");
     for var in ["RETROARCH", "PLAY_RUNTIME_DIR", "PATH"] {
         match std::env::var(var) {
