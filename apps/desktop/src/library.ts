@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { $, el, toast } from "./dom";
+import { fillArt } from "./cover";
 import { openGame } from "./game";
 import type { Game, LibraryView, RetroArchStatus } from "./types";
 
@@ -33,6 +34,26 @@ export async function renderLibrary(): Promise<void> {
   }
 
   renderShelves(data);
+  watchForCovers(data);
+}
+
+// Covers arrive a little after a game is shelved, from a thread of their
+// own. While some are still missing, look again now and then, for a while.
+let coverWatch: number | undefined;
+let coverLooks = 0;
+function watchForCovers(data: LibraryView): void {
+  window.clearTimeout(coverWatch);
+  const missing = data.games.some((g) => !g.art);
+  if (!missing || coverLooks >= 12) {
+    coverLooks = 0;
+    return;
+  }
+  coverLooks += 1;
+  coverWatch = window.setTimeout(() => void renderLibrary(), 5000);
+}
+
+export function expectCovers(): void {
+  coverLooks = 0;
 }
 
 let whereOpen = false;
@@ -166,7 +187,7 @@ function tile(game: Game): HTMLButtonElement {
   button.addEventListener("click", () => void openGame(game.id));
 
   const art = el("div", "art");
-  art.appendChild(el("div", "no-art", game.title));
+  fillArt(art, game);
   button.appendChild(art);
 
   button.appendChild(el("div", "title", game.title));

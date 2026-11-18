@@ -12,6 +12,7 @@ use serde::Serialize;
 
 pub mod guard;
 pub mod net;
+mod upload;
 pub mod views;
 
 pub use net::{reachable, Reach, Reachable};
@@ -81,6 +82,8 @@ fn image(body: &'static [u8], mime: &'static str) -> Response {
 }
 
 pub fn router(play: SharedPlay) -> Router {
+    let library = play.lock().map(|p| p.library.clone()).unwrap_or_default();
+    let state = WebState { play, library };
     Router::new()
         .route(
             "/",
@@ -126,8 +129,14 @@ pub fn router(play: SharedPlay) -> Router {
         .route("/api/stop/{id}", post(api_stop))
         .route("/api/stop", post(api_stop_all))
         .route("/api/status", get(api_status))
+        .route("/api/cover/{id}", get(api_cover))
+        .route(
+            "/api/upload/{batch}/{*path}",
+            axum::routing::put(upload::put_file),
+        )
+        .route("/api/intake/{batch}", post(upload::run_batch))
         .fallback(not_a_page)
-        .with_state(play)
+        .with_state(state)
         .layer(axum::middleware::from_fn(check_who_is_asking))
 }
 
@@ -216,6 +225,47 @@ async fn api_stop_all(State(play): State<SharedPlay>) -> Response {
     .await
 }
 
+/// A game's cover, from the library's cover folder. Read without taking the
+/// library lock: an intake can hold it for minutes, and a page of tiles
+/// should not wait for that.
+async fn api_cover(State(state): State<WebState>, Path(id): Path<i64>) -> Response {
+    let Some(path) = play_core::art::cover_file(&state.library, id) else {
+        return in_words(StatusCode::NOT_FOUND, "That game has no cover yet.");
+    };
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => {
+            let mime = if path.extension().is_some_and(|e| e == "jpg") {
+                "image/jpeg"
+            } else {
+                "image/png"
+            };
+            (
+                [
+                    (header::CONTENT_TYPE, mime),
+                    (header::CACHE_CONTROL, KEEP_A_WHILE),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(_) => in_words(StatusCode::NOT_FOUND, "That game has no cover yet."),
+    }
+}
+
+/// What every handler can reach: the shelf, and where it lives on disk,
+/// kept apart so that finding a file never waits on the lock.
+#[derive(Clone)]
+pub(crate) struct WebState {
+    play: SharedPlay,
+    library: std::path::PathBuf,
+}
+
+impl axum::extract::FromRef<WebState> for SharedPlay {
+    fn from_ref(state: &WebState) -> SharedPlay {
+        state.play.clone()
+    }
+}
+
 async fn api_status(State(play): State<SharedPlay>) -> Response {
     respond(play, |play| {
         let playing = play.running();
@@ -225,6 +275,10 @@ async fn api_status(State(play): State<SharedPlay>) -> Response {
         })
     })
     .await
+}
+
+pub(crate) fn words(status: StatusCode, message: &str) -> Response {
+    in_words(status, message)
 }
 
 // rusqlite's connection is Send but not Sync, so every request takes the

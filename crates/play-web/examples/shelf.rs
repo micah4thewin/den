@@ -24,6 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(Play::default_library);
     let play = Play::open(&library)?;
     log::info!("serving the shelf at {}", library.display());
+    play.fetch_art_in_background();
 
     let Some(addr) = play_web::addr_from_env() else {
         log::warn!("PLAY_WEB_PORT=0, so there is nothing to serve");

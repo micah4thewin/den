@@ -137,6 +137,15 @@ function tile(game) {
   const button = el("button", "tile");
   button.type = "button";
   if (isPlaying(game.id)) button.dataset.playing = "yes";
+  if (game.art) {
+    const img = el("img", "cover");
+    img.alt = "";
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.src = `/api/cover/${game.id}?v=${game.updated_at}`;
+    img.addEventListener("error", () => img.remove(), { once: true });
+    button.appendChild(img);
+  }
   button.appendChild(el("span", "title", game.title));
   const time = played(game.playtime);
   const words = isPlaying(game.id)
@@ -198,7 +207,7 @@ function render() {
 
   if (state.library.games.length === 0) {
     note.textContent =
-      "The shelf is empty. Add games in the desktop app on the machine that keeps the library.";
+      "The shelf is empty. Drop games on Add games below, or on the desktop app.";
     note.hidden = false;
     return;
   }
@@ -354,6 +363,182 @@ async function openSheet(id) {
   }
 }
 
+// ---- adding games -----------------------------------------------------------
+//
+// Files go up one at a time, each streamed straight to disk on the machine,
+// then the whole batch is filed as one drop and its report shown here.
+
+function batchName() {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return "web-" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function uploadPath(path) {
+  return path
+    .split("/")
+    .filter((part) => part && part !== "." && part !== "..")
+    .map(encodeURIComponent)
+    .join("/");
+}
+
+// A dropped folder arrives as an entry to walk, not as files.
+async function walkEntry(entry, prefix, out) {
+  if (entry.isFile) {
+    const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+    out.push({ file, path: prefix + file.name });
+    return;
+  }
+  if (entry.isDirectory) {
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+      if (batch.length === 0) break;
+      for (const child of batch) await walkEntry(child, prefix + entry.name + "/", out);
+    }
+  }
+}
+
+async function filesFromDrop(dataTransfer) {
+  const out = [];
+  const items = Array.from(dataTransfer.items || []);
+  const entries = items
+    .map((item) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null))
+    .filter(Boolean);
+  if (entries.length > 0) {
+    for (const entry of entries) await walkEntry(entry, "", out);
+    return out;
+  }
+  for (const file of Array.from(dataTransfer.files || [])) out.push({ file, path: file.name });
+  return out;
+}
+
+const adding = { busy: false, batch: null, files: [] };
+
+function addStatus(text) {
+  $("add-status").textContent = text;
+}
+
+function renderAddReport(report) {
+  const box = $("add-report");
+  box.replaceChildren();
+  box.hidden = false;
+  const tally = new Map();
+  for (const entry of report.entries) {
+    tally.set(entry.outcome.word, (tally.get(entry.outcome.word) || 0) + 1);
+  }
+  box.appendChild(
+    el(
+      "p",
+      "quiet",
+      [...tally].map(([word, count]) => `${count} ${word}`).join(" · ") || "Nothing needed filing."
+    )
+  );
+  const list = el("ul", "add-lines");
+  for (const entry of report.entries) {
+    const row = el("li");
+    row.appendChild(el("span", "word", entry.outcome.word));
+    row.appendChild(el("span", "file", entry.input.split("/").pop()));
+    const detail = Object.values(entry.outcome.detail || {}).filter(Boolean).join(" · ");
+    if (detail) row.appendChild(el("span", "quiet", detail));
+    list.appendChild(row);
+  }
+  box.appendChild(list);
+  const locked = report.entries.some(
+    (e) => e.outcome.word === "quarantined" && /password/i.test((e.outcome.detail || {}).reason || "")
+  );
+  $("add-password").hidden = !locked;
+}
+
+async function fileBatch(password) {
+  const report = await api(`/api/intake/${adding.batch}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: password || null }),
+  });
+  renderAddReport(report);
+  await refreshLibrary();
+  // Covers come a moment after the games do.
+  setTimeout(() => void refreshLibrary(), 6000);
+  setTimeout(() => void refreshLibrary(), 20000);
+}
+
+async function addFiles(files) {
+  if (adding.busy || files.length === 0) return;
+  adding.busy = true;
+  adding.batch = batchName();
+  $("add-zone").classList.add("working");
+  $("add-report").hidden = true;
+  $("add-password").hidden = true;
+  try {
+    let sent = 0;
+    const total = files.reduce((sum, f) => sum + f.file.size, 0);
+    for (const [i, { file, path }] of files.entries()) {
+      addStatus(`Sending ${i + 1} of ${files.length}: ${file.name} (${size(sent)} of ${size(total)})`);
+      await api(`/api/upload/${adding.batch}/${uploadPath(path)}`, { method: "PUT", body: file });
+      sent += file.size;
+    }
+    addStatus("Filing…");
+    await fileBatch(null);
+    addStatus("Done.");
+  } catch (error) {
+    addStatus(`That did not work: ${error.message}`);
+  } finally {
+    adding.busy = false;
+    $("add-zone").classList.remove("working");
+  }
+}
+
+function wireAdding() {
+  const zone = $("add-zone");
+  const pick = $("add-files");
+  const pickFolder = $("add-folder");
+  zone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    zone.classList.add("over");
+  });
+  zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+  zone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    zone.classList.remove("over");
+    void (async () => addFiles(await filesFromDrop(event.dataTransfer)))();
+  });
+  // A file dropped anywhere on the page should not open in the tab instead.
+  window.addEventListener("dragover", (event) => event.preventDefault());
+  window.addEventListener("drop", (event) => {
+    if (!zone.contains(event.target)) {
+      event.preventDefault();
+      void (async () => addFiles(await filesFromDrop(event.dataTransfer)))();
+    }
+  });
+  $("btn-add-files").addEventListener("click", () => pick.click());
+  $("btn-add-folder").addEventListener("click", () => pickFolder.click());
+  const fromInput = (input) => () => {
+    const files = Array.from(input.files || []).map((file) => ({
+      file,
+      path: file.webkitRelativePath || file.name,
+    }));
+    input.value = "";
+    void addFiles(files);
+  };
+  pick.addEventListener("change", fromInput(pick));
+  pickFolder.addEventListener("change", fromInput(pickFolder));
+  $("add-password").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const value = $("add-password-value").value;
+    if (!value || !adding.batch) return;
+    void (async () => {
+      try {
+        addStatus("Trying the password…");
+        await fileBatch(value);
+        addStatus("Done.");
+      } catch (error) {
+        addStatus(`That did not work: ${error.message}`);
+      }
+    })();
+  });
+}
+
 // ---- keeping up ------------------------------------------------------------
 
 function trouble(message) {
@@ -453,6 +638,8 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
 }
+
+wireAdding();
 
 void (async () => {
   await refreshLibrary();

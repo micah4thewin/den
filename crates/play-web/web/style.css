@@ -207,6 +207,43 @@ button, input { touch-action: manipulation; }
   overflow: hidden;
 }
 .tile .meta { color: var(--muted); font-size: 0.74rem; margin-top: auto; }
+.tile .cover {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+  border-radius: var(--r-1);
+  background: var(--sunken);
+  margin-bottom: 0.3rem;
+}
+
+/* Adding games from this device. */
+.add-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  border-radius: var(--r-3);
+  background: var(--sunken);
+  box-shadow: var(--press-1);
+}
+.add-zone.over { outline: 2px solid var(--fg); outline-offset: 2px; }
+.add-zone.working { opacity: 0.85; }
+.add-zone p { margin: 0; }
+.add-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.add-password { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
+.add-password input { flex: 1 1 10rem; min-width: 0; min-height: var(--tap); }
+.add-report { margin-top: 0.75rem; }
+.add-lines { list-style: none; margin: 0; padding: 0; }
+.add-lines li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.82rem;
+}
+.add-lines .word { font-weight: 700; min-width: 5.5rem; }
+.add-lines .file { overflow-wrap: anywhere; }
 
 /* Buttons: one shape, two weights. */
 .btn {

@@ -5,7 +5,7 @@
 // right now is the only answer worth giving, so /api/ always goes to the wire
 // and an unreachable machine is reported as unreachable.
 
-const SHELF = "play-shelf-v1";
+const SHELF = "play-shelf-v2";
 const SHELL = ["/", "/app.js", "/style.css", "/icon-192.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

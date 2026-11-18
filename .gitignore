@@ -1,7 +1,8 @@
 target/
 **/target/
 
-Cargo.lock
+# Lock files are committed: Play is an application, and the shell's Tauri
+# crate must match the @tauri-apps packages package-lock.json pins.
 
 node_modules/
 dist/

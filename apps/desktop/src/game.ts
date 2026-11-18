@@ -1,3 +1,4 @@
+import { fillArt } from "./cover";
 import { invoke } from "@tauri-apps/api/core";
 import { $, el, showScreen, toast } from "./dom";
 import { pickRetroArch } from "./library";
@@ -40,7 +41,7 @@ function renderGame(view: GameView): void {
   layout.replaceChildren();
 
   const art = el("div", "game-art");
-  art.appendChild(el("div", "no-art", view.game.title));
+  fillArt(art, view.game);
 
   const meta = el("div", "game-meta");
   meta.appendChild(el("h1", undefined, view.game.title));

@@ -41,6 +41,27 @@
     <div class="chips" id="chips" role="group" aria-label="Systems"></div>
     <p class="quiet note" id="note" hidden></p>
     <div id="shelves"></div>
+
+    <section class="band add" aria-labelledby="add-title">
+      <h2 id="add-title">Add games</h2>
+      <div class="add-zone" id="add-zone">
+        <p>Drop files, folders or archives here, and they are filed on the machine the
+          library lives on.</p>
+        <div class="add-buttons">
+          <button type="button" class="btn" id="btn-add-files">Choose files…</button>
+          <button type="button" class="btn" id="btn-add-folder">Choose a folder…</button>
+        </div>
+        <input type="file" id="add-files" multiple hidden />
+        <input type="file" id="add-folder" webkitdirectory multiple hidden />
+        <p class="quiet" id="add-status" role="status" aria-live="polite"></p>
+      </div>
+      <form class="add-password" id="add-password" hidden>
+        <label for="add-password-value" class="quiet">Some archives are locked. Their password:</label>
+        <input type="password" id="add-password-value" autocomplete="off" />
+        <button type="submit" class="btn">Try again</button>
+      </form>
+      <div class="add-report" id="add-report" hidden></div>
+    </section>
   </main>
 
   <dialog class="sheet" id="sheet" aria-label="Game">

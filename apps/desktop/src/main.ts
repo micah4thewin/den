@@ -1,6 +1,6 @@
 import { refreshControllers } from "./controllers";
 import { $, el, showScreen, toast } from "./dom";
-import { chooseAndIntake, wireDrop } from "./intake";
+import { chooseAndIntake, chooseFilesAndIntake, wireDrop } from "./intake";
 import { renderLibrary } from "./library";
 import { icon } from "./ui/icons";
 import type { Reachable } from "./types";
@@ -42,6 +42,10 @@ function wireNavigation(): void {
   $<HTMLButtonElement>("btn-refresh").addEventListener("click", () => void renderLibrary());
   $<HTMLButtonElement>("btn-back").addEventListener("click", () => showScreen("library"));
   $<HTMLButtonElement>("btn-choose").addEventListener("click", () => void chooseAndIntake());
+  $<HTMLButtonElement>("btn-choose-files").addEventListener(
+    "click",
+    () => void chooseFilesAndIntake(),
+  );
   $<HTMLButtonElement>("btn-pads").addEventListener("click", () => void refreshControllers());
 }
 

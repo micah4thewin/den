@@ -157,8 +157,10 @@ mod tests {
 
     #[test]
     fn a_public_name_pointed_at_a_private_address_is_refused() {
-        let said = refusal("GET", Some("games.example.com"), None).expect("refused");
-        assert!(said.contains("games.example.com"), "{said}");
+        // Not the name the test below adds to PLAY_WEB_HOSTS: tests run at
+        // the same time and the environment is shared.
+        let said = refusal("GET", Some("arcade.example.net"), None).expect("refused");
+        assert!(said.contains("arcade.example.net"), "{said}");
         assert!(said.contains("PLAY_WEB_HOSTS"), "{said}");
         assert!(!name_is_ours("evil.example.com"));
     }

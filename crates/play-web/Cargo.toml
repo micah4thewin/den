@@ -12,13 +12,13 @@ serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
 axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "fs", "io-util"] }
+http-body-util = "0.1"
 
 [dev-dependencies]
 tempfile.workspace = true
 env_logger.workspace = true
 tower = { version = "0.5", features = ["util"] }
-http-body-util = "0.1"
 
 [lints]
 workspace = true
