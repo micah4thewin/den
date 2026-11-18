@@ -198,6 +198,7 @@ def extract(archive, into):
 
 def promote(into):
     """Lift the binary and everything beside it to the top of `into`."""
+    adopt_appimage(into)
     binary = find_binary(into)
     if not binary:
         return
@@ -224,6 +225,22 @@ def find_binary(root):
             if name in filenames:
                 return os.path.join(dirpath, name)
     return None
+
+
+def adopt_appimage(root):
+    """libretro's Linux download is a 7z holding `RetroArch-Linux-x86_64.AppImage`.
+    Name it `retroarch`, where play-runner looks. play-runner starts it with
+    APPIMAGE_EXTRACT_AND_RUN=1, so the machine needs no FUSE to run it."""
+    if find_binary(root):
+        return
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for name in filenames:
+            if name.lower().endswith(".appimage"):
+                source = os.path.join(dirpath, name)
+                target = os.path.join(dirpath, "retroarch")
+                os.replace(source, target)
+                os.chmod(target, 0o755)
+                return
 
 
 def stage_from_system(dest, want_cores):
@@ -317,9 +334,78 @@ def sha256_of(path):
     return digest.hexdigest()
 
 
-def stage_from_manifest(dest, want_cores, record, force, manifest_path):
+def download(url, suffix):
     import urllib.request
 
+    handle, tmp = tempfile.mkstemp(prefix="play-runtime-", suffix=suffix)
+    os.close(handle)
+    try:
+        with urllib.request.urlopen(url, timeout=300) as response, open(tmp, "wb") as out:
+            shutil.copyfileobj(response, out)
+    except BaseException:
+        os.remove(tmp)
+        raise
+    return tmp
+
+
+def fetch_pinned(entry, what, key, record, force):
+    """Download entry["url"] and hold it to entry["sha256"]. Returns the file
+    and whether the pin changed. The caller removes the file."""
+    url = entry["url"]
+    expected = entry.get("sha256")
+    log(f"  fetching {url}")
+    tmp = download(url, archive_suffix(url))
+    got = sha256_of(tmp)
+    if expected and expected != got and not (record and force):
+        os.remove(tmp)
+        raise SystemExit(
+            f"sha256 mismatch for the {what}\n  expected {expected}\n  got      {got}\n"
+            "The file at that URL is not the one this manifest was pinned to.\n"
+            "If the change is expected, re-pin deliberately: --record --force."
+        )
+    if not expected and not record:
+        os.remove(tmp)
+        raise SystemExit(
+            f"The manifest has no sha256 for the {what} on {key}. Re-run with --record\n"
+            "to pin the hash of what you just downloaded, having satisfied yourself it\n"
+            "is the right file."
+        )
+    changed = record and got != expected
+    if changed:
+        was = f" (was {expected})" if expected else ""
+        log(f"  recorded sha256 {got} for the {what}{was}")
+        entry["sha256"] = got
+    return tmp, changed
+
+
+def cores_in(tree):
+    """Every libretro core anywhere under `tree`, by file name."""
+    found = {}
+    for dirpath, _dirnames, filenames in os.walk(tree):
+        for name in filenames:
+            if name.endswith(CORE_EXT) and "_libretro" in name:
+                found.setdefault(name, os.path.join(dirpath, name))
+    return found
+
+
+def stage_cores_from(tree, dest):
+    """Copy Play's default cores out of an unpacked core pack."""
+    found = cores_in(tree)
+    os.makedirs(dest, exist_ok=True)
+    copied = []
+    for core, licence in sorted(CORE_LICENCES.items()):
+        name = f"{core}_libretro{CORE_EXT}"
+        if name in found:
+            shutil.copy2(found[name], os.path.join(dest, name))
+            copied.append(name)
+            log(f"           {name}  [{licence}]")
+    missing = sorted(set(f"{c}_libretro{CORE_EXT}" for c in CORE_LICENCES) - set(copied))
+    if missing:
+        log(f"           not in the pack: {', '.join(missing)}")
+    return copied
+
+
+def stage_from_manifest(dest, want_cores, record, force, manifest_path):
     manifest = load_manifest(manifest_path)
     key = platform_key()
     entry = manifest.get("platforms", {}).get(key)
@@ -328,51 +414,41 @@ def stage_from_manifest(dest, want_cores, record, force, manifest_path):
             f"The manifest has no download for {key}.\n"
             f"Add one to {os.path.relpath(manifest_path, ROOT)}, or use --from-archive."
         )
-    url = entry["url"]
-    expected = entry.get("sha256")
-    log(f"  fetching {url}")
 
-    handle, tmp = tempfile.mkstemp(prefix="play-runtime-", suffix=archive_suffix(url))
-    os.close(handle)
+    changed = False
+    tmp, did = fetch_pinned(entry, "RetroArch download", key, record, force)
+    changed |= did
     try:
-        with urllib.request.urlopen(url, timeout=120) as response, open(tmp, "wb") as out:
-            shutil.copyfileobj(response, out)
-        got = sha256_of(tmp)
-
-        if expected and expected != got and not (record and force):
-            raise SystemExit(
-                f"sha256 mismatch\n  expected {expected}\n  got      {got}\n"
-                "The file at that URL is not the one this manifest was pinned to.\n"
-                "If the change is expected, re-pin deliberately: --record --force."
-            )
-        if not expected and not record:
-            raise SystemExit(
-                f"The manifest has no sha256 for {key}. Re-run with --record to pin\n"
-                "the hash of what you just downloaded, having satisfied yourself it\n"
-                "is the right file."
-            )
-
         extract(tmp, dest)
         promote(dest)
         binary = find_binary(dest)
         if not binary:
-            raise SystemExit(f"no RetroArch binary inside {url}")
+            raise SystemExit(f"no RetroArch binary inside {entry['url']}")
         os.chmod(binary, 0o755)
-
-        if record and got != expected:
-            entry["sha256"] = got
-            manifest.setdefault("platforms", {})[key] = entry
-            with open(manifest_path, "w", encoding="utf-8") as out:
-                json.dump(manifest, out, indent=2, sort_keys=True)
-                out.write("\n")
-            was = f" (was {expected})" if expected else ""
-            log(f"  recorded sha256 {got}{was}")
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
 
-    if want_cores:
-        log("  cores    a downloaded RetroArch fetches its own on first run")
+    cores = entry.get("cores")
+    if want_cores and cores and cores.get("url"):
+        log("  cores")
+        tmp, did = fetch_pinned(cores, "core pack", key, record, force)
+        changed |= did
+        unpacked = tempfile.mkdtemp(prefix="play-cores-")
+        try:
+            extract(tmp, unpacked)
+            stage_cores_from(unpacked, os.path.join(os.path.dirname(binary), "cores"))
+        finally:
+            os.remove(tmp)
+            shutil.rmtree(unpacked, ignore_errors=True)
+    elif want_cores:
+        log("  cores    the manifest names no core pack for this platform")
+
+    if changed:
+        manifest.setdefault("platforms", {})[key] = entry
+        with open(manifest_path, "w", encoding="utf-8") as out:
+            json.dump(manifest, out, indent=2, sort_keys=True)
+            out.write("\n")
     return binary
 
 

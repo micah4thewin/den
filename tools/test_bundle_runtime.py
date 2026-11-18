@@ -372,6 +372,60 @@ def test_readme_survives(tmp):
     check("  and still stages the binary", staged_binary(dest) is not None)
 
 
+def test_manifest_with_core_pack_and_appimage(tmp):
+    """libretro's shape: an AppImage inside an archive, and a separate core pack."""
+    served = os.path.join(tmp, "served-pack")
+    os.makedirs(served, exist_ok=True)
+    ext = {"win32": ".dll", "darwin": ".dylib"}.get(sys.platform, ".so")
+
+    image = plant_retroarch(os.path.join(tmp, "pack-src"), "RetroArch-Linux-x86_64.AppImage")
+    with zipfile.ZipFile(os.path.join(served, "RetroArch.zip"), "w") as zf:
+        zf.write(image, "RetroArch-Linux-x86_64/RetroArch-Linux-x86_64.AppImage")
+    with zipfile.ZipFile(os.path.join(served, "cores.zip"), "w") as zf:
+        for core in ("mesen", "snes9x", "not_a_default"):
+            zf.writestr(f"RetroArch-Linux-x86_64/cores/{core}_libretro{ext}", b"core")
+
+    handler = lambda *a, **k: http.server.SimpleHTTPRequestHandler(*a, directory=served, **k)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    manifest_path = os.path.join(tmp, "manifest-pack.json")
+    key = platform_key()
+    with open(manifest_path, "w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "platforms": {
+                    key: {
+                        "url": f"{base}/RetroArch.zip",
+                        "sha256": None,
+                        "cores": {"url": f"{base}/cores.zip", "sha256": None},
+                    }
+                }
+            },
+            handle,
+        )
+    try:
+        dest = os.path.join(tmp, "staged-pack")
+        result = run(["--from-manifest", "--into", dest, "--manifest", manifest_path, "--record"])
+        check("an AppImage inside the download is staged as retroarch",
+              os.path.isfile(os.path.join(dest, "retroarch")), result.stdout + result.stderr)
+        cores = os.path.join(dest, "cores")
+        check("  and Play's default cores come out of the core pack",
+              os.path.isfile(os.path.join(cores, f"mesen_libretro{ext}"))
+              and os.path.isfile(os.path.join(cores, f"snes9x_libretro{ext}")),
+              str(os.listdir(cores) if os.path.isdir(cores) else "no cores dir"))
+        check("  and nothing else does",
+              not os.path.exists(os.path.join(cores, f"not_a_default_libretro{ext}")))
+        with open(manifest_path, encoding="utf-8") as handle:
+            pinned = json.load(handle)["platforms"][key]
+        check("  and both downloads are pinned",
+              bool(pinned["sha256"]) and bool(pinned["cores"]["sha256"]), str(pinned))
+        result = run(["--from-manifest", "--into", dest, "--manifest", manifest_path])
+        check("  and a second run verifies both", result.returncode == 0, result.stderr)
+    finally:
+        server.shutdown()
+
+
 def main():
     print("bundle_runtime")
     with tempfile.TemporaryDirectory() as tmp:
@@ -383,6 +437,7 @@ def main():
         test_from_archive_appimage(tmp)
         test_from_archive_directory(tmp)
         test_manifest_download(tmp)
+        test_manifest_with_core_pack_and_appimage(tmp)
         test_download_failure_leaves_nothing_behind(tmp)
         test_allow_missing(tmp)
         test_readme_survives(tmp)

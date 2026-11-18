@@ -218,6 +218,11 @@ impl Runner {
         cmd.arg("--config").arg(&config_path);
         cmd.arg("--fullscreen");
         cmd.arg(&game.path);
+        // The RetroArch Play bundles on Linux is an AppImage. Asking it to
+        // unpack itself instead of mounting means no FUSE is needed on the
+        // machine; any other program ignores the variable.
+        #[cfg(target_os = "linux")]
+        cmd.env("APPIMAGE_EXTRACT_AND_RUN", "1");
         let child = cmd.spawn().map_err(RunnerError::Io)?;
         Ok(Running { child, config_path })
     }

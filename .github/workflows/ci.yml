@@ -28,6 +28,32 @@ jobs:
       - name: The diagnostic runs
         run: cargo run -q -p play-doctor -- "$RUNNER_TEMP/play-ci-library"
 
+  # The intake, the archive readers compiled into it (RAR and zstd are C and
+  # C++ built by cargo), and the cover matcher, on the other machines Play
+  # ships for. The messy-drop tests are the ones that matter here.
+  platforms:
+    name: Intake on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows, os: windows-latest }
+          - { name: Raspberry Pi (arm64), os: ubuntu-24.04-arm }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: The workspace builds
+        run: cargo build --workspace --all-targets
+      - name: Intake, archives and covers
+        run: cargo test -p play-ident -p play-intake -p play-art
+      - name: The diagnostic runs
+        run: cargo run -q -p play-doctor -- "$RUNNER_TEMP/play-ci-library"
+
   frontend:
     name: Desktop frontend
     runs-on: ubuntu-latest
@@ -93,7 +119,10 @@ jobs:
           platforms = m["platforms"]
           assert platforms, "no platforms in the manifest"
           for key, entry in platforms.items():
-              assert set(entry) == {"url", "sha256"}, f"{key}: unexpected keys {set(entry)}"
+              assert set(entry) <= {"url", "sha256", "cores"}, f"{key}: unexpected keys {set(entry)}"
+              assert {"url", "sha256"} <= set(entry), f"{key}: missing url or sha256"
+              if "cores" in entry:
+                  assert set(entry["cores"]) == {"url", "sha256"}, f"{key}: bad cores entry"
           print(f"{len(platforms)} platforms")
           EOF
 
@@ -106,3 +135,11 @@ jobs:
         with:
           python-version: '3.12'
       - run: python3 tools/check_brand.py
+
+  covers:
+    name: Box art index
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every system has names
+        run: python3 tools/cover_index.py --check

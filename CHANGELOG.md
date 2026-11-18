@@ -6,6 +6,38 @@ the build plan's milestones, not semver.
 
 ## [Unreleased]
 
+### Added
+- **Covers for every game.** Play ships the names of libretro's 68,596 box
+  art images, picks the right one on the machine, fetches it once and keeps
+  it in the library; the desktop shelf, the game page and the phone remote
+  show it, and a game without one gets a title card. `PLAY_COVERS=0` turns
+  fetching off. New crate: `play-art`.
+- **Drop anything, anywhere.** The whole desktop window takes a drop, any mix
+  of files, folders and archives filed as one report, with drops queued while
+  one is running and a password box when an archive is locked. **Choose
+  files…** joins **Choose a folder…**.
+- **Every archive format, built in.** RAR (via the unrar library, so no
+  system `unrar`), 7z with encryption and every common codec, zip with
+  Deflate64/bzip2/LZMA/zstd, bz2, xz and zst join zip, tar and gz. Split sets
+  (`.001`…) are joined; later RAR volumes are read with the first; a missing
+  part is named.
+- **Add games from the phone remote**: drop files or folders on the page, or
+  choose them, and they are streamed to the machine and filed.
+- **Release workflow** building the Debian, Windows and Raspberry Pi
+  installers with RetroArch and its cores bundled (apt-installed on the Pi),
+  then installing them on clean machines to check they start.
+
+### Fixed
+- Intake ran on the desktop's main thread and froze the window until it was
+  done; it now runs in the background.
+- A drop is no longer copied whole into the system temp folder first; only
+  what archives hold is unpacked, into the library's own `_staging`.
+- Byte-identical duplicates are no longer copied into `_variants` again on
+  every re-drop.
+- The Tauri crate and the `@tauri-apps` npm packages had drifted to
+  different minor versions, which stops `tauri build`; they are aligned, and
+  `Cargo.lock` is now committed so they stay that way.
+
 ### In progress
 - Building the Tauri v2 desktop shell (M0 scaffold) over the already-built
   core workspace.

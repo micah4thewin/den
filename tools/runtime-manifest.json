@@ -1,43 +1,54 @@
 {
+  "_comment": [
+    "Where tools/bundle_runtime.py --from-manifest downloads a RetroArch and its",
+    "cores from: libretro's versioned stable builds, so a pinned hash stays true.",
+    "",
+    "Each entry is pinned to a sha256 the first time it is fetched with --record",
+    "(the Release workflow does this on its first run and prints the hashes in",
+    "its summary; commit them here so later builds verify instead of trusting).",
+    "An unpinned entry is never staged without --record.",
+    "",
+    "linux-aarch64 (Raspberry Pi) has no portable RetroArch from libretro, so the",
+    "arm64 .deb depends on Debian's `retroarch` package instead, which apt",
+    "installs along with Play.",
+    "",
+    "--from-archive is the other route for a release: download a build yourself,",
+    "check it, and hand the file to the script."
+  ],
   "_sync": [
     "tools/bundle_runtime.py re-implements play-runner's search in Python:",
     "system_candidates() mirrors candidates() and find_core_dir() mirrors",
     "core_dir() in crates/play-runner/src/locate.rs. The two lists must move",
     "together: a path added on one side is added on the other."
   ],
-  "_comment": [
-    "Where tools/bundle_runtime.py --from-manifest downloads a RetroArch from.",
-    "",
-    "The URLs below are libretro's published build locations. They are NOT",
-    "pinned to a hash yet, and they were not verified from the environment this",
-    "file was written in, which cannot reach that host. Run",
-    "",
-    "    python3 tools/bundle_runtime.py --from-manifest --record",
-    "",
-    "once on a machine with network: it downloads, prints the sha256, writes it",
-    "here, and every later run verifies against it. Until a sha256 is recorded",
-    "the script refuses to stage a download, so an unpinned entry can never be",
-    "silently trusted.",
-    "",
-    "--from-archive is the surer route for a release: download a build yourself,",
-    "check it, and hand the file to the script."
-  ],
   "platforms": {
-    "linux-x86_64": {
-      "url": "https://buildbot.libretro.com/nightly/linux/x86_64/RetroArch.7z",
-      "sha256": null
-    },
-    "win32-x86_64": {
-      "url": "https://buildbot.libretro.com/nightly/windows/x86_64/RetroArch.7z",
-      "sha256": null
+    "darwin-aarch64": {
+      "sha256": null,
+      "url": null
     },
     "darwin-x86_64": {
-      "url": null,
-      "sha256": null
+      "sha256": null,
+      "url": null
     },
-    "darwin-aarch64": {
-      "url": null,
-      "sha256": null
+    "linux-aarch64": {
+      "sha256": null,
+      "url": null
+    },
+    "linux-x86_64": {
+      "cores": {
+        "sha256": null,
+        "url": "https://buildbot.libretro.com/stable/1.20.0/linux/x86_64/RetroArch_cores.7z"
+      },
+      "sha256": null,
+      "url": "https://buildbot.libretro.com/stable/1.20.0/linux/x86_64/RetroArch.7z"
+    },
+    "win32-x86_64": {
+      "cores": {
+        "sha256": null,
+        "url": "https://buildbot.libretro.com/stable/1.20.0/windows/x86_64/RetroArch_cores.7z"
+      },
+      "sha256": null,
+      "url": "https://buildbot.libretro.com/stable/1.20.0/windows/x86_64/RetroArch.7z"
     }
   }
 }

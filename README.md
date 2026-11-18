@@ -4,9 +4,10 @@ A quiet place to play the games you already own.
 
 Play is a local-first launcher. Point it at a folder of downloads and it
 unpacks, identifies, repairs, names, and shelves what it finds; then it boots
-those games through RetroArch and remembers where you left off. Nothing leaves
-the machine, nothing in the drop folder is modified, and nothing is ever
-deleted.
+those games through RetroArch and remembers where you left off. Your games
+never leave the machine, nothing in the drop folder is modified, and nothing is
+ever deleted. The one thing Play asks the internet for is box art (see
+[Covers](#covers)), and `PLAY_COVERS=0` stops even that.
 
 Every file that goes in comes back with a word:
 
@@ -20,6 +21,50 @@ Every file that goes in comes back with a word:
 | `extra` | a manual, a scan, a readme, an imported save |
 | `quarantined` | could not be used, with the reason and a way to retry |
 | `unsupported` | a format Play does not handle |
+
+## Dropping things in
+
+Drag anything onto the Play window, whichever screen is showing: files,
+folders, archives, or a mix of all three at once. Everything dropped together
+comes back as one report, and a second drop made while the first is still
+being filed waits its turn. **Choose a folder…** and **Choose files…** do the
+same from a dialog, and the phone remote has the same drop zone (see
+[Adding games from another device](#adding-games-from-another-device)).
+
+Every archive format a download folder actually holds is read *inside* Play,
+so nothing has to be installed for it: zip (including Deflate64, bzip2, LZMA
+and zstd entries, and encrypted zips), 7z (including encrypted ones), RAR 4
+and 5 (including solid, encrypted and multi-volume sets), tar, gz, tgz, bz2,
+xz and zst. Archives inside archives are opened too, eight deep. Sets cut into
+`name.001`, `name.002`… are joined back together first; the later volumes of
+a RAR set are read along with the first and say so in the report. A set with
+a part missing says which part. A locked archive says so, and the report
+offers a password box to try again.
+
+What archives hold is unpacked into `_staging` inside the library, not the
+system temp folder, so a disc image bigger than a RAM-backed `/tmp` still
+fits; it is cleared away when the intake finishes. Litter an operating system
+leaves in folders (`.DS_Store`, `Thumbs.db`, `__MACOSX`, `._` files) is
+skipped. Dropping the same thing twice says `duplicate` and costs no disk.
+
+## Covers
+
+Every game gets its box art. Play ships the names of the 68,000-odd box
+art images libretro publishes for the systems it plays
+([`crates/play-art/data/boxarts.txt.gz`](crates/play-art/data), rebuilt by
+`python3 tools/cover_index.py`), matches each game against them on this
+machine — by its full No-Intro name when the file has one, otherwise by its
+title with region, punctuation and "The" set aside, preferring the region
+asked for, then USA, World, Europe and Japan — and fetches the one image it
+needs, once, from libretro's thumbnail repositories. It is kept in
+`_art` inside the library and shown on the desktop shelf and the phone remote.
+A game no cover is found for shows a plain title card and is asked about
+again after two weeks. Without a network nothing is decided; Play tries again
+next time.
+
+Fetching sends the game's name to `raw.githubusercontent.com` (and
+`thumbnails.libretro.com` if that fails), and nothing else. `PLAY_COVERS=0`
+in the environment, or the library setting `covers` = `off`, turns it off.
 
 Colour never carries any of that. Status is always a word — see
 [`docs/DESIGN.md`](docs/DESIGN.md) for why, and
@@ -37,11 +82,12 @@ crates/play-input     controller detection
 crates/play-core      the one object the shell talks to
 crates/play-web       the remote: the shelf in any browser on your network or tailnet
 crates/play-doctor    `play-doctor`: what Play can and cannot find on this machine
+crates/play-art       box art: the shipped name index, matching, fetching
 apps/desktop         the Tauri v2 shell: four screens over a typed IPC layer
 tools/               the brand sheet, the icon generator, the runtime bundler
 ```
 
-The eight crates are one Cargo workspace and build headless: no WebView, no
+The nine crates are one Cargo workspace and build headless: no WebView, no
 window, no system packages. The shell is deliberately *outside* that
 workspace, in `apps/desktop/src-tauri`, so the crates can be tested on any
 machine and in CI without dragging platform GUI dependencies in.
@@ -51,7 +97,7 @@ machine and in CI without dragging platform GUI dependencies in.
 The core workspace needs nothing but a Rust toolchain:
 
 ```sh
-cargo test --workspace          # 130 tests, headless
+cargo test --workspace          # 161 tests, headless
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 ```
@@ -148,6 +194,23 @@ staged and under what licence, so the question is at least visible.
 **Cores are downloaded by RetroArch**, not by Play — Online Updater → Core
 Downloader. `--from-system` copies the ones you already have; `play-doctor`
 lists which of Play's defaults are present.
+
+### Release builds
+
+The **Release** workflow (Actions tab, or push a `v*` tag) builds every
+installer with everything inside it:
+
+| Installer | RetroArch |
+| --- | --- |
+| Debian / Ubuntu x86-64 `.deb` and `.AppImage` | bundled, with Play's default cores; runs without FUSE |
+| Windows 10/11 `.exe` and `.msi` | bundled, with Play's default cores |
+| Raspberry Pi (arm64) `.deb` | Debian's `retroarch` package, which apt installs alongside |
+
+The downloads come from libretro's versioned stable builds named in
+`tools/runtime-manifest.json`. The first run records their sha256 in the
+job summary; commit those so every later build verifies against them. The
+workflow then installs the `.deb` on a clean Debian and the Windows installer
+on a clean runner and checks the bundled RetroArch starts.
 
 ## Controls
 
@@ -252,6 +315,17 @@ extends. Two things are refused, and both cost one header to check:
 
 `PLAY_WEB_PORT` moves the remote, `PLAY_WEB_PORT=0` turns it off, and
 `PLAY_WEB_BIND` narrows what it listens on.
+
+### Adding games from another device
+
+The bottom of the remote's page is an **Add games** drop zone, with
+**Choose files…** and **Choose a folder…** beside it for a phone that cannot
+drag. A file dropped anywhere on the page lands there too. Each file is
+streamed straight to disk on the machine the library lives on (a disc image
+never has to fit in memory), then the batch is filed exactly as a drop on the
+desktop window would be, and the report shows on the page. Uploads obey the
+same rule as every other change: only Play's own page may send them.
+`PLAY_WEB_UPLOAD=0` turns this off and leaves the remote read-and-play only.
 
 ### Working on it
 
